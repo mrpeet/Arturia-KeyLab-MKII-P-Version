@@ -98,6 +98,7 @@ FPC_MAP = {
 PAD_MODE_DRUM = 0
 PAD_MODE_CHROMATIC = 1
 CURRENT_PAD_MODE = PAD_MODE_DRUM
+PAD_VELOCITY_ENABLED = True
 
 # CHROMATIC MAP (Inverted Rows: Bottom-Left start)
 CHROMATIC_MAP = {
@@ -163,7 +164,7 @@ class KeyLabMidiProcessor:
             
             # Global Controls
             .NewHandler(Hardware.DAW.Global.CONTROL_1, self.ToggleBrowserChannelRack, ignore_release) # 74
-            .NewHandler(Hardware.DAW.Global.CONTROL_2, self.TogglePadMode, ignore_release) # 87
+            .NewHandler(Hardware.DAW.Global.CONTROL_2, self.TogglePadMode) # 87
             .NewHandler(Hardware.DAW.Global.CONTROL_3, self.SnapToggle, ignore_release) # 88
             .NewHandler(Hardware.DAW.Global.CONTROL_4, self.MetronomeToggle, ignore_release) # 89
             .NewHandler(Hardware.DAW.Global.CONTROL_5, self.UndoOrCut) # 81 - Handles both press and release
@@ -274,13 +275,26 @@ class KeyLabMidiProcessor:
 # ...
 
     def TogglePadMode(self, event):
-        global CURRENT_PAD_MODE
-        if CURRENT_PAD_MODE == PAD_MODE_DRUM:
-            CURRENT_PAD_MODE = PAD_MODE_CHROMATIC
-            self._navigation.HintRefresh("Pads: Chromatic")
+        if self._is_pressed(event):
+            self._pad_mode_start_time = time.time()
         else:
-            CURRENT_PAD_MODE = PAD_MODE_DRUM
-            self._navigation.HintRefresh("Pads: FPC / Drum")
+            if hasattr(self, '_pad_mode_start_time'):
+                duration = time.time() - self._pad_mode_start_time
+                if duration > 1.0:
+                    # Toggle Velocity
+                    global PAD_VELOCITY_ENABLED
+                    PAD_VELOCITY_ENABLED = not PAD_VELOCITY_ENABLED
+                    state = "On" if PAD_VELOCITY_ENABLED else "Off"
+                    self._navigation.HintRefresh("Velocity: " + state)
+                else:
+                    # Toggle Pad Mode
+                    global CURRENT_PAD_MODE
+                    if CURRENT_PAD_MODE == PAD_MODE_DRUM:
+                        CURRENT_PAD_MODE = PAD_MODE_CHROMATIC
+                        self._navigation.HintRefresh("Pads: Chromatic")
+                    else:
+                        CURRENT_PAD_MODE = PAD_MODE_DRUM
+                        self._navigation.HintRefresh("Pads: FPC / Drum")
 
 
 
@@ -301,7 +315,8 @@ class KeyLabMidiProcessor:
                     if mapped_note is not None:
                         event.data1 = mapped_note
                 
-                event.data2 = midi.MIDI_NOTEON
+                if not PAD_VELOCITY_ENABLED:
+                    event.data2 = 127
                 event.handled = False
         elif event.status == 137 :
             if SEQ_MODE == 1 :
@@ -650,21 +665,8 @@ class KeyLabMidiProcessor:
         self._navigation.HintRefresh("Redo")
 
     def SnapToggle(self, event):
-        # Toggle between Line (0) and None (3) - verifying constants would be good, but 0/3 is common.
-        # Let's try to toggle based on current state.
-        # If not None (3), set to None. Else set to Line (0).
-        # Actually, ui.snapMode(1) forces a specific mode? 
-        # Documentation says: snapMode(int mode) -> 0: Line, 1: Cell, 2: None, 3: None?
-        # Let's assume 0 is Line and 3 is None (or 0 is Main, 3 is None).
-        # Let's try: if current is not None, set None. Else set Line.
-        # Using 3 for None (Snap off) and 0 for Line (Snap to line).
-        current = ui.getSnapMode()
-        if current != 3:
-            ui.setSnapMode(3)
-            self._navigation.HintRefresh("Snap: None")
-        else:
-            ui.setSnapMode(0)
-            self._navigation.HintRefresh("Snap: Line")
+        transport.globalTransport(midi.FPT_Snap, 1)
+        self._navigation.HintRefresh("Snap: Toggle")
 
     def MetronomeToggle(self, event):
         transport.globalTransport(midi.FPT_Metronome, 1)
@@ -676,7 +678,7 @@ class KeyLabMidiProcessor:
         else:
             if hasattr(self, '_undo_start_time'):
                 duration = time.time() - self._undo_start_time
-                if duration > 1.5:
+                if duration > 1.0:
                     # Cut
                     self._show_and_focus(midi.widChannelRack) # Cut usually works on selected items
                     ui.cut()
