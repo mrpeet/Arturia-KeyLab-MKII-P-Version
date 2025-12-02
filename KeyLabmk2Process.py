@@ -94,6 +94,11 @@ FPC_MAP = {
             "51":54
             }
             
+# PAD MODE
+PAD_MODE_DRUM = 0
+PAD_MODE_CHROMATIC = 1
+CURRENT_PAD_MODE = PAD_MODE_DRUM
+            
 
 # This class processes all CC coming from the controller
 # The class creates new handler for each function
@@ -150,7 +155,7 @@ class KeyLabMidiProcessor:
             
             # Global Controls
             .NewHandler(Hardware.DAW.Global.CONTROL_1, self.ToggleBrowserChannelRack, ignore_release) # 74
-            # .NewHandler(Hardware.DAW.Global.CONTROL_2, ...) # 87 - Unmapped for now
+            .NewHandler(Hardware.DAW.Global.CONTROL_2, self.TogglePadMode, ignore_release) # 87
             .NewHandler(Hardware.DAW.Global.CONTROL_3, self.SnapToggle, ignore_release) # 88
             .NewHandler(Hardware.DAW.Global.CONTROL_4, self.MetronomeToggle, ignore_release) # 89
             .NewHandler(Hardware.DAW.Global.CONTROL_5, self.UndoOrCut) # 81 - Handles both press and release
@@ -254,13 +259,35 @@ class KeyLabMidiProcessor:
         device.processMIDICC(event)
         self._sequencer_dispatcher.Dispatch(event)
 
+
+
+# ... (existing constants)
+
+# ...
+
+    def TogglePadMode(self, event):
+        global CURRENT_PAD_MODE
+        if CURRENT_PAD_MODE == PAD_MODE_DRUM:
+            CURRENT_PAD_MODE = PAD_MODE_CHROMATIC
+            self._navigation.HintRefresh("Pads: Chromatic")
+        else:
+            CURRENT_PAD_MODE = PAD_MODE_DRUM
+            self._navigation.HintRefresh("Pads: FPC / Drum")
+
     def OnDrumSeqEvent(self, event) :
         if event.status == 153 :
             if SEQ_MODE == 1 :
                 event.handled = True
                 self.OnSeqEvent(event)
             else :
-                event.data1 = FPC_MAP.get(str(event.data1))
+                if CURRENT_PAD_MODE == PAD_MODE_DRUM:
+                    # FPC Mapping
+                    mapped_note = FPC_MAP.get(str(event.data1))
+                    if mapped_note is not None:
+                        event.data1 = mapped_note
+                # If Chromatic, we just pass the note as is (36-51)
+                # Or we could transpose it if needed, but user asked for "chromatic order" which matches the hardware output (36-51).
+                
                 event.data2 = midi.MIDI_NOTEON
                 event.handled = False
         elif event.status == 137 :
@@ -269,7 +296,11 @@ class KeyLabMidiProcessor:
                     event.handled = True
                     self.ReleaseBit(event)
             else :
-                event.data1 = FPC_MAP.get(str(event.data1))
+                if CURRENT_PAD_MODE == PAD_MODE_DRUM:
+                    mapped_note = FPC_MAP.get(str(event.data1))
+                    if mapped_note is not None:
+                        event.data1 = mapped_note
+                
                 event.data2 = midi.MIDI_NOTEOFF
                 event.handled = False             
             
