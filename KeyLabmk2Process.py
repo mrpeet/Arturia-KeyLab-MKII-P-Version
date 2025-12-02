@@ -646,7 +646,7 @@ class KeyLabMidiProcessor:
         self._navigation.OverdubRefresh()
 
     def Redo(self, event):
-        transport.globalTransport(midi.FPT_Redo, 1)
+        general.undoDown()
         self._navigation.HintRefresh("Redo")
 
     def SnapToggle(self, event):
