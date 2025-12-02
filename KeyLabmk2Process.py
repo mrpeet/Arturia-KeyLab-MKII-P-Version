@@ -280,17 +280,43 @@ class KeyLabMidiProcessor:
     def UpdatePadColors(self, mode):
         # Determine color based on mode
         if mode == PAD_MODE_DRUM:
-            r, g, b = Hardware.Pads.COLOR_YELLOW
+            r, g, b = Hardware.Pads.COLOR_YELLOW_DIM
         else:
-            r, g, b = Hardware.Pads.COLOR_PURPLE
+            r, g, b = Hardware.Pads.COLOR_PURPLE_DIM
             
         # Send SysEx for each pad
         for i in range(16):
             pad_id = Hardware.Pads.PAD_LED_START_ID + i
             # SysEx: F0 00 20 6B 7F 42 02 00 16 <LEDID> <R> <G> <B> F7
-            # send_to_device adds header (F0 00 20 6B 7F 42) and footer (F7)
             payload = bytes([0x02, 0x00, 0x16, pad_id, r, g, b])
             send_to_device(payload)
+
+    def SetPadColor(self, pad_index, velocity):
+        # pad_index: 0-15
+        # velocity: 0-127
+        
+        # Determine base colors
+        if CURRENT_PAD_MODE == PAD_MODE_DRUM:
+            base_r, base_g, base_b = Hardware.Pads.COLOR_YELLOW
+            dim_r, dim_g, dim_b = Hardware.Pads.COLOR_YELLOW_DIM
+        else:
+            base_r, base_g, base_b = Hardware.Pads.COLOR_PURPLE
+            dim_r, dim_g, dim_b = Hardware.Pads.COLOR_PURPLE_DIM
+            
+        if velocity == 0:
+            # Return to Dim
+            r, g, b = dim_r, dim_g, dim_b
+        else:
+            # Interpolate between Dim and Max based on velocity
+            # Velocity 1 -> Dim, Velocity 127 -> Max
+            ratio = velocity / 127.0
+            r = int(dim_r + (base_r - dim_r) * ratio)
+            g = int(dim_g + (base_g - dim_g) * ratio)
+            b = int(dim_b + (base_b - dim_b) * ratio)
+            
+        pad_id = Hardware.Pads.PAD_LED_START_ID + pad_index
+        payload = bytes([0x02, 0x00, 0x16, pad_id, r, g, b])
+        send_to_device(payload)
 
     def TogglePadMode(self, event):
         if self._is_pressed(event):
@@ -325,6 +351,8 @@ class KeyLabMidiProcessor:
                 event.handled = True
                 self.OnSeqEvent(event)
             else :
+                original_note = event.data1
+                
                 if CURRENT_PAD_MODE == PAD_MODE_DRUM:
                     # FPC Mapping
                     mapped_note = FPC_MAP.get(str(event.data1))
@@ -338,6 +366,11 @@ class KeyLabMidiProcessor:
                 
                 if not PAD_VELOCITY_ENABLED:
                     event.data2 = 127
+                
+                # Set Pad Color (Active)
+                if 36 <= original_note <= 51:
+                    self.SetPadColor(original_note - 36, event.data2)
+
                 event.handled = False
         elif event.status == 137 :
             if SEQ_MODE == 1 :
@@ -345,6 +378,8 @@ class KeyLabMidiProcessor:
                     event.handled = True
                     self.ReleaseBit(event)
             else :
+                original_note = event.data1
+                
                 if CURRENT_PAD_MODE == PAD_MODE_DRUM:
                     mapped_note = FPC_MAP.get(str(event.data1))
                     if mapped_note is not None:
@@ -355,12 +390,12 @@ class KeyLabMidiProcessor:
                         event.data1 = mapped_note
                 
                 event.data2 = midi.MIDI_NOTEOFF
-                event.handled = False             
-            
-           
-  
-  # WINDOW
-
+                
+                # Set Pad Color (Idle/Dim)
+                if 36 <= original_note <= 51:
+                    self.SetPadColor(original_note - 36, 0)
+                    
+                event.handled = False
 
 
     def _show_and_focus(self, window):

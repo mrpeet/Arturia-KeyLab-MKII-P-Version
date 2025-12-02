@@ -32,6 +32,8 @@ class Hardware:
         PAD_LED_START_ID = 0x70 # 112
         COLOR_YELLOW = (31, 31, 0)
         COLOR_PURPLE = (31, 0, 31)
+        COLOR_YELLOW_DIM = (12, 12, 0) # ~40%
+        COLOR_PURPLE_DIM = (12, 0, 12) # ~40%
 
     # Group 3: DAW Commands
     class DAW:
