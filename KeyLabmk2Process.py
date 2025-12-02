@@ -568,22 +568,14 @@ class KeyLabMidiProcessor:
             self.previousPreset(event)
         elif ui.getFocused(WidBrowser):
             # Navigate Browser Tabs (Snapshots)
-            # Try using ui.previous() which might cycle tabs if at top level?
-            # Or use specific command if found.
-            # User wants "Left Arrow" to go to previous tab.
-            # If ui.previous() just moves selection up, we might need another way.
-            # But let's try ui.previous() first as it's standard navigation.
-            # Actually, user said "navigate through the browser tabs".
-            # If ui.previous() doesn't work, we might need to simulate keys or find specific FPT.
-            # Let's try transport.globalTransport(midi.FPT_Previous, 1) again?
-            # No, that failed.
-            # Let's try ui.navigateBrowser(0) if it exists?
-            # Or just ui.previous() and hope it works on tabs if focused correctly?
-            # Wait, "Tabs" are Snapshots (1, 2, 3...).
-            # Maybe we can just cycle them?
-            # Let's try to use ui.next() / ui.previous() for now.
-            ui.previous()
-            self._navigation.HintRefresh("Browser: Prev")
+            # User requested specific function: ui.navigateBrowserTabs(FPT_Left)
+            try:
+                ui.navigateBrowserTabs(midi.FPT_Left)
+                self._navigation.HintRefresh("Browser: Prev Tab")
+            except AttributeError:
+                # Fallback if function doesn't exist (e.g. older FL version)
+                print("ui.navigateBrowserTabs not found")
+                ui.previous()
         else :
             pattern = patterns.patternNumber()
             patterns.jumpToPattern(pattern - 1)
@@ -594,8 +586,14 @@ class KeyLabMidiProcessor:
             self.nextPreset(event)
         elif ui.getFocused(WidBrowser):
             # Navigate Browser Tabs (Snapshots)
-            ui.next()
-            self._navigation.HintRefresh("Browser: Next")
+            # User requested specific function: ui.navigateBrowserTabs(FPT_Right)
+            try:
+                ui.navigateBrowserTabs(midi.FPT_Right)
+                self._navigation.HintRefresh("Browser: Next Tab")
+            except AttributeError:
+                # Fallback
+                print("ui.navigateBrowserTabs not found")
+                ui.next()
         else :
             pattern = patterns.patternNumber()
             patterns.jumpToPattern(pattern + 1)
