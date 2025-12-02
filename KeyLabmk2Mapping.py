@@ -28,6 +28,11 @@ class Hardware:
         
         ALL_PADS = range(36, 52) # 36 to 51
 
+        # Pad Colors (SysEx)
+        PAD_LED_START_ID = 0x70 # 112
+        COLOR_YELLOW = (31, 31, 0)
+        COLOR_PURPLE = (31, 0, 31)
+
     # Group 3: DAW Commands
     class DAW:
         class Track:

@@ -227,6 +227,9 @@ class KeyLabMidiProcessor:
         
         self._navigation = NavigationMode(self._mk2.paged_display())
 
+        # Initialize Pad Colors
+        self.UpdatePadColors(CURRENT_PAD_MODE)
+
 
 
 
@@ -274,6 +277,21 @@ class KeyLabMidiProcessor:
 
 # ...
 
+    def UpdatePadColors(self, mode):
+        # Determine color based on mode
+        if mode == PAD_MODE_DRUM:
+            r, g, b = Hardware.Pads.COLOR_YELLOW
+        else:
+            r, g, b = Hardware.Pads.COLOR_PURPLE
+            
+        # Send SysEx for each pad
+        for i in range(16):
+            pad_id = Hardware.Pads.PAD_LED_START_ID + i
+            # SysEx: F0 00 20 6B 7F 42 02 00 16 <LEDID> <R> <G> <B> F7
+            # send_to_device adds header (F0 00 20 6B 7F 42) and footer (F7)
+            payload = bytes([0x02, 0x00, 0x16, pad_id, r, g, b])
+            send_to_device(payload)
+
     def TogglePadMode(self, event):
         if self._is_pressed(event):
             self._pad_mode_start_time = time.time()
@@ -295,6 +313,9 @@ class KeyLabMidiProcessor:
                     else:
                         CURRENT_PAD_MODE = PAD_MODE_DRUM
                         self._navigation.HintRefresh("Pads: FPC / Drum")
+                    
+                    # Update Pad Colors
+                    self.UpdatePadColors(CURRENT_PAD_MODE)
 
 
 
