@@ -568,8 +568,22 @@ class KeyLabMidiProcessor:
             self.previousPreset(event)
         elif ui.getFocused(WidBrowser):
             # Navigate Browser Tabs (Snapshots)
-            transport.globalTransport(midi.FPT_Previous, 1)
-            self._navigation.HintRefresh("Browser: Prev Tab")
+            # Try using ui.previous() which might cycle tabs if at top level?
+            # Or use specific command if found.
+            # User wants "Left Arrow" to go to previous tab.
+            # If ui.previous() just moves selection up, we might need another way.
+            # But let's try ui.previous() first as it's standard navigation.
+            # Actually, user said "navigate through the browser tabs".
+            # If ui.previous() doesn't work, we might need to simulate keys or find specific FPT.
+            # Let's try transport.globalTransport(midi.FPT_Previous, 1) again?
+            # No, that failed.
+            # Let's try ui.navigateBrowser(0) if it exists?
+            # Or just ui.previous() and hope it works on tabs if focused correctly?
+            # Wait, "Tabs" are Snapshots (1, 2, 3...).
+            # Maybe we can just cycle them?
+            # Let's try to use ui.next() / ui.previous() for now.
+            ui.previous()
+            self._navigation.HintRefresh("Browser: Prev")
         else :
             pattern = patterns.patternNumber()
             patterns.jumpToPattern(pattern - 1)
@@ -580,8 +594,8 @@ class KeyLabMidiProcessor:
             self.nextPreset(event)
         elif ui.getFocused(WidBrowser):
             # Navigate Browser Tabs (Snapshots)
-            transport.globalTransport(midi.FPT_Next, 1)
-            self._navigation.HintRefresh("Browser: Next Tab")
+            ui.next()
+            self._navigation.HintRefresh("Browser: Next")
         else :
             pattern = patterns.patternNumber()
             patterns.jumpToPattern(pattern + 1)
@@ -793,9 +807,15 @@ class KeyLabMidiProcessor:
         self._navigation.HintRefresh("Redo")
 
     def SnapToggle(self, event):
-        transport.globalTransport(midi.FPT_Snap, 1)
-        self._navigation.HintRefresh("Snap: Toggle")
-        # We can't easily read the new state immediately sometimes, but let's try
+        # Toggle between Line (0) and None (3)
+        # ui.getSnapMode() returns the current snap mode index
+        if ui.getSnapMode() == 3:
+            ui.snapMode(0) # Set to Line
+            self._navigation.HintRefresh("Snap: Line")
+        else:
+            ui.snapMode(3) # Set to None
+            self._navigation.HintRefresh("Snap: None")
+        
         self.UpdateDAWButtonFeedback()
 
     def MetronomeToggle(self, event):
