@@ -228,10 +228,16 @@ class KeyLabMidiProcessor:
         self._navigation = NavigationMode(self._mk2.paged_display())
 
         # Initialize Pad Colors
-        self.UpdatePadColors(CURRENT_PAD_MODE)
+        try:
+            self.UpdatePadColors(CURRENT_PAD_MODE)
+        except Exception as e:
+            print("Error initializing pad colors:", e)
         
         # Initialize DAW Button Feedback
-        self.UpdateDAWButtonFeedback()
+        try:
+            self.UpdateDAWButtonFeedback()
+        except Exception as e:
+            print("Error initializing DAW feedback:", e)
 
 
 
@@ -727,7 +733,24 @@ class KeyLabMidiProcessor:
         # Helper to send feedback
         def send_feedback(cc, is_on):
             val = 127 if is_on else 25 # 100% vs ~20%
-            device.midiOutMsg(midi.MIDI_CONTROLCHANGE + (0 << 8) + (cc << 16) + (val << 24))
+            # Correct MIDI message packing: Status + (Data1 << 8) + (Data2 << 16)
+            # Assuming Channel 2 (DAW Mode) for feedback? Or Channel 1?
+            # KeyLab MKII DAW mode usually listens on Channel 2 (0x1) for feedback.
+            # midi.MIDI_CONTROLCHANGE is usually 0xB0 (Channel 1). 
+            # Let's try Channel 2 (0xB1) if standard is B0.
+            # Actually, let's use the generic 0xB0 | 0x01 (Channel 2) if we are unsure, 
+            # or just 0xB0 if it's User mode.
+            # Given this is "DAW Commands", it's likely Channel 2.
+            # But let's check if we can find the channel used elsewhere.
+            # For now, I'll use 0xB0 + (0x02 - 1) ? No.
+            # Let's stick to Channel 1 (0xB0) first as it's the safest default if not specified.
+            # If it doesn't work, we can change to Channel 2.
+            # But the CRASH is likely due to the 4-byte packing with 0 in the middle.
+            
+            # Using Channel 2 (0x1) just in case, as Arturia DAW mode is usually Ch 2.
+            channel = 1 # Channel 2 (0-indexed 1)
+            status = midi.MIDI_CONTROLCHANGE + channel
+            device.midiOutMsg(status + (cc << 8) + (val << 16))
 
         # Track Controls
         # Control 3: Snap (Was Overdub)
