@@ -10,6 +10,7 @@ import midi
 import ArturiaCrossKeyboardKLmk2 as AKLmk2
 import KeyLabmk2SeqParam as KLmk2SQP
 import KeyLabmk2Plugin
+from KeyLabmk2Mapping import Hardware
 
 
 from KeyLabmk2Dispatch import MidiEventDispatcher
@@ -133,24 +134,24 @@ class KeyLabMidiProcessor:
             MidiEventDispatcher(by_control_num)
             
             
-            .NewHandler(95, self.Record, ignore_release)
-            .NewHandler(94, self.Start, ignore_release)
-            .NewHandler(93, self.Stop, ignore_release)
-            .NewHandler(89, self.SetClick, ignore_press)
-            .NewHandler(74, self.DrumSeqToggle, ignore_release)
-            .NewHandler(56, self.TapTempo, ignore_release)
-            .NewHandler(88, self.Overdub, ignore_press)
-            .NewHandler(86, self.Loop, ignore_release)
-            .NewHandler(81, self.Undo, ignore_press)
-            .NewHandler(57, self.Cut, ignore_press)
-            .NewHandler(0x5B, self.RewindORprevBar)
-            .NewHandler(0x5C, self.FastForwardORnextBar)
-            .NewHandler(84, self.SwitchWindow, ignore_release)
+            .NewHandler(Hardware.Transport.RECORD, self.Record, ignore_release)
+            .NewHandler(Hardware.Transport.PLAY, self.Start, ignore_release)
+            .NewHandler(Hardware.Transport.STOP, self.Stop, ignore_release)
+            .NewHandler(Hardware.DAW.Global.CONTROL_4, self.SetClick, ignore_press)
+            .NewHandler(Hardware.DAW.Global.CONTROL_1, self.DrumSeqToggle, ignore_release)
+            .NewHandler(Hardware.DAW.Track.CONTROL_4, self.TapTempo, ignore_release)
+            .NewHandler(Hardware.DAW.Global.CONTROL_3, self.Overdub, ignore_press)
+            .NewHandler(Hardware.Transport.LOOP, self.Loop, ignore_release)
+            .NewHandler(Hardware.DAW.Global.CONTROL_5, self.Undo, ignore_press)
+            .NewHandler(Hardware.DAW.Track.CONTROL_5, self.Cut, ignore_press)
+            .NewHandler(Hardware.Transport.REWIND, self.RewindORprevBar)
+            .NewHandler(Hardware.Transport.FAST_FORWARD, self.FastForwardORnextBar)
+            .NewHandler(Hardware.Navigation.KNOB_PUSH, self.SwitchWindow, ignore_release)
             .NewHandler(46, self.BankSelect, ignore_release)
             .NewHandler(47, self.BankSelect, ignore_release)
-            .NewHandler(98, self.previousPattern, ignore_release)
-            .NewHandler(99, self.nextPattern, ignore_release)
-            .NewHandler(87, self.ToggleBrowserChannelRack, ignore_release)
+            .NewHandler(Hardware.Navigation.LEFT_ARROW, self.previousPattern, ignore_release)
+            .NewHandler(Hardware.Navigation.RIGHT_ARROW, self.nextPattern, ignore_release)
+            .NewHandler(Hardware.DAW.Global.CONTROL_2, self.ToggleBrowserChannelRack, ignore_release)
             .NewHandler(51, self.ToggleMixerChannelRack, ignore_release)
             .NewHandlerForKeys(range(8, 16), self.SoloChannel, ignore_press)
             .NewHandlerForKeys(range(16, 24), self.MuteChannel, ignore_press)
@@ -161,9 +162,9 @@ class KeyLabMidiProcessor:
          
         self._knob_dispatcher = (
             MidiEventDispatcher(by_control_num)
-            .NewHandler(60, self.OnKnobNavEvent)
-            .NewHandler(60, self.OnKnobNavEvent)
-            .NewHandlerForKeys(range(16,25), self.SetPanTrack)
+            .NewHandler(Hardware.Navigation.KNOB_TURN, self.OnKnobNavEvent)
+            .NewHandler(Hardware.Navigation.KNOB_TURN, self.OnKnobNavEvent)
+            .NewHandlerForKeys(Hardware.Mixer.Knobs.ALL, self.SetPanTrack)
         )      
         
         
@@ -176,24 +177,9 @@ class KeyLabMidiProcessor:
         
         self._plugin_dispatcher = (
             MidiEventDispatcher(by_control_num)
-            .NewHandler(74, self.Plugin)
-            .NewHandler(71, self.Plugin)
-            .NewHandler(76, self.Plugin)
-            .NewHandler(77, self.Plugin)
-            .NewHandler(93, self.Plugin)
-            .NewHandler(18, self.Plugin)
-            .NewHandler(19, self.Plugin)
-            .NewHandler(16, self.Plugin)
-            
-            .NewHandler(73, self.Plugin)
-            .NewHandler(75, self.Plugin)
-            .NewHandler(79, self.Plugin)
-            .NewHandler(72, self.Plugin)
-            .NewHandler(80, self.Plugin)
-            .NewHandler(81, self.Plugin)
-            .NewHandler(82, self.Plugin)
-            .NewHandler(83, self.Plugin)
-            .NewHandler(17, self.Plugin)
+            .NewHandlerForKeys(Hardware.Mixer.Knobs.ALL, self.Plugin)
+            .NewHandlerForKeys(Hardware.Mixer.Faders.ALL, self.Plugin)
+            .NewHandlerForKeys(Hardware.Mixer.TrackButtons.ALL, self.Plugin)
             .NewHandler(1, self.SetPanTrack)
             
             
@@ -203,7 +189,7 @@ class KeyLabMidiProcessor:
         
         self._sequencer_dispatcher = (
             MidiEventDispatcher(by_control_num)
-            .NewHandlerForKeys(range(36,52), self.PressSequencer)
+            .NewHandlerForKeys(Hardware.Pads.ALL_PADS, self.PressSequencer)
         )
       
             # MAPPING SLIDERS
@@ -756,10 +742,3 @@ class KeyLabMidiProcessor:
         
     def FakeMIDImsg(self) :
         transport.globalTransport(midi.FPT_Punch,1)
-
-        
-  
-  
-        
-    
-        
