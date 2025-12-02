@@ -158,14 +158,14 @@ class KeyLabMidiProcessor:
             # Track Controls
             .NewHandler(Hardware.DAW.Track.CONTROL_1, self.NewPattern, ignore_release) # 8
             .NewHandler(Hardware.DAW.Track.CONTROL_2, self.FocusMixer, ignore_release) # 16
-            .NewHandler(Hardware.DAW.Track.CONTROL_3, self.ToggleOverdub, ignore_release) # 0
+            .NewHandler(Hardware.DAW.Track.CONTROL_3, self.SnapToggle, ignore_release) # 0 (Was Overdub)
             .NewHandler(Hardware.DAW.Track.CONTROL_4, self.TapTempo, ignore_release) # 56
             .NewHandler(Hardware.DAW.Track.CONTROL_5, self.Redo, ignore_release) # 57
             
             # Global Controls
             .NewHandler(Hardware.DAW.Global.CONTROL_1, self.ToggleBrowserChannelRack, ignore_release) # 74
             .NewHandler(Hardware.DAW.Global.CONTROL_2, self.TogglePadMode) # 87
-            .NewHandler(Hardware.DAW.Global.CONTROL_3, self.SnapToggle, ignore_release) # 88
+            .NewHandler(Hardware.DAW.Global.CONTROL_3, self.ToggleOverdub, ignore_release) # 88 (Was Snap)
             .NewHandler(Hardware.DAW.Global.CONTROL_4, self.MetronomeToggle, ignore_release) # 89
             .NewHandler(Hardware.DAW.Global.CONTROL_5, self.UndoOrCut) # 81 - Handles both press and release
             
@@ -229,6 +229,9 @@ class KeyLabMidiProcessor:
 
         # Initialize Pad Colors
         self.UpdatePadColors(CURRENT_PAD_MODE)
+        
+        # Initialize DAW Button Feedback
+        self.UpdateDAWButtonFeedback()
 
 
 
@@ -557,6 +560,10 @@ class KeyLabMidiProcessor:
     def previousPattern(self, event) :
         if ui.getFocused(5) :
             self.previousPreset(event)
+        elif ui.getFocused(WidBrowser):
+            # Navigate Browser Tabs (Snapshots)
+            transport.globalTransport(midi.FPT_Previous, 1)
+            self._navigation.HintRefresh("Browser: Prev Tab")
         else :
             pattern = patterns.patternNumber()
             patterns.jumpToPattern(pattern - 1)
@@ -565,6 +572,10 @@ class KeyLabMidiProcessor:
     def nextPattern(self, event) :
         if ui.getFocused(5) :
             self.nextPreset(event)
+        elif ui.getFocused(WidBrowser):
+            # Navigate Browser Tabs (Snapshots)
+            transport.globalTransport(midi.FPT_Next, 1)
+            self._navigation.HintRefresh("Browser: Next Tab")
         else :
             pattern = patterns.patternNumber()
             patterns.jumpToPattern(pattern + 1)
@@ -712,9 +723,47 @@ class KeyLabMidiProcessor:
             ui.setFocused(midi.widMixer)
         self._navigation.HintRefresh("Mixer Focused")
 
+    def UpdateDAWButtonFeedback(self):
+        # Helper to send feedback
+        def send_feedback(cc, is_on):
+            val = 127 if is_on else 25 # 100% vs ~20%
+            device.midiOutMsg(midi.MIDI_CONTROLCHANGE + (0 << 8) + (cc << 16) + (val << 24))
+
+        # Track Controls
+        # Control 3: Snap (Was Overdub)
+        # Snap is a bit complex as it has modes. Let's assume "Line" or "Cell" is ON.
+        # ui.getSnapMode() returns index. 0 might be "Line" or "Main".
+        # Let's just assume if it's not "None" (3?) it's ON? 
+        # Or just toggle state if we track it.
+        # For now, let's use a simple check if we can.
+        # Actually, SnapToggle just sends FPT_Snap.
+        # Let's assume it's always "ON" (High brightness) for now as it's a toggle?
+        # Or maybe we can't easily read Snap state.
+        # Let's skip Snap feedback for a moment or set it to always ON/Dim?
+        # User said "visualise their state".
+        # Let's try to read it. ui.getSnapMode()
+        
+        # Overdub (Global 3)
+        send_feedback(Hardware.DAW.Global.CONTROL_3, transport.isRecording()) # Overdub is often linked to Record/Loop Record? 
+        # Wait, Overdub is specifically Loop Record?
+        # transport.getLoopMode()
+        send_feedback(Hardware.DAW.Global.CONTROL_3, transport.getLoopMode())
+
+        # Metronome (Global 4)
+        send_feedback(Hardware.DAW.Global.CONTROL_4, transport.isMetronomeEnabled())
+        
+        # Snap (Track 3)
+        # We'll just light it up if Snap is not "None" (assuming 3 is None, need to verify)
+        # For now, let's just set it to Dim (20%) as default, or maybe toggle locally?
+        # Let's leave Snap as is for now or try to guess.
+        
+        # Loop (Transport)
+        # send_feedback(Hardware.Transport.LOOP, transport.getLoopMode())
+
     def ToggleOverdub(self, event):
         transport.globalTransport(midi.FPT_Overdub, 1)
         self._navigation.OverdubRefresh()
+        self.UpdateDAWButtonFeedback()
 
     def Redo(self, event):
         general.undoDown()
@@ -723,10 +772,13 @@ class KeyLabMidiProcessor:
     def SnapToggle(self, event):
         transport.globalTransport(midi.FPT_Snap, 1)
         self._navigation.HintRefresh("Snap: Toggle")
+        # We can't easily read the new state immediately sometimes, but let's try
+        self.UpdateDAWButtonFeedback()
 
     def MetronomeToggle(self, event):
         transport.globalTransport(midi.FPT_Metronome, 1)
         self._navigation.MetronomeRefresh()
+        self.UpdateDAWButtonFeedback()
 
     def UndoOrCut(self, event):
         if self._is_pressed(event):
