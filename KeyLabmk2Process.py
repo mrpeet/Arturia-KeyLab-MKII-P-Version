@@ -98,6 +98,14 @@ FPC_MAP = {
 PAD_MODE_DRUM = 0
 PAD_MODE_CHROMATIC = 1
 CURRENT_PAD_MODE = PAD_MODE_DRUM
+
+# CHROMATIC MAP (Inverted Rows: Bottom-Left start)
+CHROMATIC_MAP = {
+    "36": 48, "37": 49, "38": 50, "39": 51, # Row 1 (Top) -> Row 4 (High)
+    "40": 44, "41": 45, "42": 46, "43": 47, # Row 2 -> Row 3
+    "44": 40, "45": 41, "46": 42, "47": 43, # Row 3 -> Row 2
+    "48": 36, "49": 37, "50": 38, "51": 39  # Row 4 (Bottom) -> Row 1 (Low)
+}
             
 
 # This class processes all CC coming from the controller
@@ -274,6 +282,8 @@ class KeyLabMidiProcessor:
             CURRENT_PAD_MODE = PAD_MODE_DRUM
             self._navigation.HintRefresh("Pads: FPC / Drum")
 
+
+
     def OnDrumSeqEvent(self, event) :
         if event.status == 153 :
             if SEQ_MODE == 1 :
@@ -285,8 +295,11 @@ class KeyLabMidiProcessor:
                     mapped_note = FPC_MAP.get(str(event.data1))
                     if mapped_note is not None:
                         event.data1 = mapped_note
-                # If Chromatic, we just pass the note as is (36-51)
-                # Or we could transpose it if needed, but user asked for "chromatic order" which matches the hardware output (36-51).
+                elif CURRENT_PAD_MODE == PAD_MODE_CHROMATIC:
+                    # Chromatic Mapping (Bottom-Left Start)
+                    mapped_note = CHROMATIC_MAP.get(str(event.data1))
+                    if mapped_note is not None:
+                        event.data1 = mapped_note
                 
                 event.data2 = midi.MIDI_NOTEON
                 event.handled = False
@@ -298,6 +311,10 @@ class KeyLabMidiProcessor:
             else :
                 if CURRENT_PAD_MODE == PAD_MODE_DRUM:
                     mapped_note = FPC_MAP.get(str(event.data1))
+                    if mapped_note is not None:
+                        event.data1 = mapped_note
+                elif CURRENT_PAD_MODE == PAD_MODE_CHROMATIC:
+                    mapped_note = CHROMATIC_MAP.get(str(event.data1))
                     if mapped_note is not None:
                         event.data1 = mapped_note
                 
