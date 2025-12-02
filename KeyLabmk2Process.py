@@ -7,6 +7,7 @@ import ui
 import device
 import plugins
 import midi
+import time
 import ArturiaCrossKeyboardKLmk2 as AKLmk2
 import KeyLabmk2SeqParam as KLmk2SQP
 import KeyLabmk2Plugin
@@ -137,13 +138,23 @@ class KeyLabMidiProcessor:
             .NewHandler(Hardware.Transport.RECORD, self.Record, ignore_release)
             .NewHandler(Hardware.Transport.PLAY, self.Start, ignore_release)
             .NewHandler(Hardware.Transport.STOP, self.Stop, ignore_release)
-            .NewHandler(Hardware.DAW.Global.CONTROL_4, self.SetClick, ignore_press)
-            .NewHandler(Hardware.DAW.Global.CONTROL_1, self.DrumSeqToggle, ignore_release)
-            .NewHandler(Hardware.DAW.Track.CONTROL_4, self.TapTempo, ignore_release)
-            .NewHandler(Hardware.DAW.Global.CONTROL_3, self.Overdub, ignore_press)
             .NewHandler(Hardware.Transport.LOOP, self.Loop, ignore_release)
-            .NewHandler(Hardware.DAW.Global.CONTROL_5, self.Undo, ignore_press)
-            .NewHandler(Hardware.DAW.Track.CONTROL_5, self.Cut, ignore_press)
+            
+            # Group 3: DAW Commands
+            # Track Controls
+            .NewHandler(Hardware.DAW.Track.CONTROL_1, self.NewPattern, ignore_release) # 8
+            .NewHandler(Hardware.DAW.Track.CONTROL_2, self.FocusMixer, ignore_release) # 16
+            .NewHandler(Hardware.DAW.Track.CONTROL_3, self.ToggleOverdub, ignore_release) # 0
+            .NewHandler(Hardware.DAW.Track.CONTROL_4, self.TapTempo, ignore_release) # 56
+            .NewHandler(Hardware.DAW.Track.CONTROL_5, self.Redo, ignore_release) # 57
+            
+            # Global Controls
+            .NewHandler(Hardware.DAW.Global.CONTROL_1, self.ToggleBrowserChannelRack, ignore_release) # 74
+            # .NewHandler(Hardware.DAW.Global.CONTROL_2, ...) # 87 - Unmapped for now
+            .NewHandler(Hardware.DAW.Global.CONTROL_3, self.SnapToggle, ignore_release) # 88
+            .NewHandler(Hardware.DAW.Global.CONTROL_4, self.MetronomeToggle, ignore_release) # 89
+            .NewHandler(Hardware.DAW.Global.CONTROL_5, self.UndoOrCut) # 81 - Handles both press and release
+            
             .NewHandler(Hardware.Transport.REWIND, self.RewindORprevBar)
             .NewHandler(Hardware.Transport.FAST_FORWARD, self.FastForwardORnextBar)
             .NewHandler(Hardware.Navigation.KNOB_PUSH, self.SwitchWindow, ignore_release)
@@ -151,7 +162,6 @@ class KeyLabMidiProcessor:
             .NewHandler(47, self.BankSelect, ignore_release)
             .NewHandler(Hardware.Navigation.LEFT_ARROW, self.previousPattern, ignore_release)
             .NewHandler(Hardware.Navigation.RIGHT_ARROW, self.nextPattern, ignore_release)
-            .NewHandler(Hardware.DAW.Global.CONTROL_2, self.ToggleBrowserChannelRack, ignore_release)
             .NewHandler(51, self.ToggleMixerChannelRack, ignore_release)
             .NewHandlerForKeys(range(8, 16), self.SoloChannel, ignore_press)
             .NewHandlerForKeys(range(16, 24), self.MuteChannel, ignore_press)
@@ -572,6 +582,62 @@ class KeyLabMidiProcessor:
         self._navigation.SnapModeRefresh()
     
  
+    def NewPattern(self, event):
+        patterns.findFirstNextEmptyPat(midi.FFNEP_DontPrompt)
+        self._navigation.HintRefresh("New Pattern")
+
+    def FocusMixer(self, event):
+        if not ui.getVisible(midi.widMixer):
+            ui.showWindow(midi.widMixer)
+        if not ui.getFocused(midi.widMixer):
+            ui.setFocused(midi.widMixer)
+        self._navigation.HintRefresh("Mixer Focused")
+
+    def ToggleOverdub(self, event):
+        transport.globalTransport(midi.FPT_Overdub, 1)
+        self._navigation.OverdubRefresh()
+
+    def Redo(self, event):
+        transport.globalTransport(midi.FPT_Redo, 1)
+        self._navigation.HintRefresh("Redo")
+
+    def SnapToggle(self, event):
+        # Toggle between Line (0) and None (3) - verifying constants would be good, but 0/3 is common.
+        # Let's try to toggle based on current state.
+        # If not None (3), set to None. Else set to Line (0).
+        # Actually, ui.snapMode(1) forces a specific mode? 
+        # Documentation says: snapMode(int mode) -> 0: Line, 1: Cell, 2: None, 3: None?
+        # Let's assume 0 is Line and 3 is None (or 0 is Main, 3 is None).
+        # Let's try: if current is not None, set None. Else set Line.
+        # Using 3 for None (Snap off) and 0 for Line (Snap to line).
+        current = ui.getSnapMode()
+        if current != 3:
+            ui.setSnapMode(3)
+            self._navigation.HintRefresh("Snap: None")
+        else:
+            ui.setSnapMode(0)
+            self._navigation.HintRefresh("Snap: Line")
+
+    def MetronomeToggle(self, event):
+        transport.globalTransport(midi.FPT_Metronome, 1)
+        self._navigation.MetronomeRefresh()
+
+    def UndoOrCut(self, event):
+        if self._is_pressed(event):
+            self._undo_start_time = time.time()
+        else:
+            if hasattr(self, '_undo_start_time'):
+                duration = time.time() - self._undo_start_time
+                if duration > 1.5:
+                    # Cut
+                    self._show_and_focus(midi.widChannelRack) # Cut usually works on selected items
+                    ui.cut()
+                    self._navigation.CutRefresh()
+                else:
+                    # Unlimited Undo (Step back in history)
+                    general.undoUp()
+                    self._navigation.UndoRefresh()
+
     def SetVolumeTrack(self, event) :
         if MIXER_MODE == 1 :
             if event.status == 232 and event.midiId == 224  :
