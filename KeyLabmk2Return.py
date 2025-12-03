@@ -365,22 +365,31 @@ class KeyLabLightReturn:
         send_to_device(bytes([0x02, 0x00, 0x10, 0x64, 0x7F]))
         send_to_device(bytes([0x02, 0x00, 0x10, 0x65, 0x7F]))
         send_to_device(bytes([0x02, 0x00, 0x10, 0x66, 0x7F]))
-            CHANNEL_MAP = NB_BANK*[8*[0]]
-            for i in range(NB_BANK-1) :
-                CHANNEL_MAP[i] = 8*[1]
-            for i in range(ITEMS) :
-                CHANNEL_MAP[NB_BANK-1][i] = 1
-            return CHANNEL_MAP
-        else :
-            ACTIVE_CHANNELS = channels.channelCount()
-            NB_BANK = (ACTIVE_CHANNELS//8)+1
-            ITEMS = (ACTIVE_CHANNELS%8)
-            CHANNEL_MAP = NB_BANK*[8*[0]]
-            for i in range(NB_BANK-1) :
-                CHANNEL_MAP[i] = 8*[1]
-            for i in range(ITEMS) :
-                CHANNEL_MAP[NB_BANK-1][i] = 1
-            return CHANNEL_MAP
+        send_to_device(bytes([0x02, 0x00, 0x10, 0x67, 0x7F]))
+        send_to_device(bytes([0x02, 0x00, 0x10, 0x69, 0x7F]))
+        send_to_device(bytes([0x02, 0x00, 0x10, 0x6A, 0x7F]))
+        send_to_device(bytes([0x02, 0x00, 0x10, 0x6B, 0x7F]))
+        
+        # CENTER LED (Navigation?)
+        # Original: 0x1A, 0x1B. 
+        # Adding Navigation Keys: Left (0x62/98), Right (0x63/99), Knob (0x54/84)
+        
+        send_to_device(bytes([0x02, 0x00, 0x10, 0x1A, 0x7F]))
+        send_to_device(bytes([0x02, 0x00, 0x10, 0x1B, 0x7F]))
+        
+        # Try to light up Navigation Keys (100% brightness)
+        # Left Arrow
+        send_to_device(bytes([0x02, 0x00, 0x10, 0x62, 0x7F]))
+        # Right Arrow
+        send_to_device(bytes([0x02, 0x00, 0x10, 0x63, 0x7F]))
+        # Knob Push / Center
+        send_to_device(bytes([0x02, 0x00, 0x10, 0x54, 0x7F]))
+        
+        # CHANNELS LEDS
+        send_to_device(bytes([0x02, 0x00, 0x16, 0x2A, 0x7F, 0x7F, 0x7F, 0x7F]))
+        
+        self._cache['static_leds_sent'] = True
+
     
 
     def SelectedChannel(self) :
