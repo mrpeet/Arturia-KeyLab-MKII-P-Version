@@ -118,8 +118,8 @@ class KeyLabLightReturn:
         # Play Button LED ID: 0x6D (Original)
         
         if transport.isPlaying():
-            # Playing: Stop = 50% (0x40), Play = 100% (0x7F)
-            stop_val = 0x40
+            # Playing: Stop = 20% (0x14), Play = 100% (0x7F)
+            stop_val = 0x14
             play_val = 0x7F
         else:
             # Stopped: Stop = 100% (0x7F), Play = Dim (0x14)
@@ -136,7 +136,7 @@ class KeyLabLightReturn:
 
 
     def IsChannelSolo(self) :
-        if ui.getFocused(WidChannelRack):
+        if not ui.getFocused(WidMixer):
             if channels.isChannelSolo(channels.channelNumber()) :
                 self._send_cached('solo', bytes([0x02, 0x00, 0x10, 0x60, 0x7F]))              
             else :
@@ -151,7 +151,7 @@ class KeyLabLightReturn:
     
  
     def IsChannelMuted(self) :
-        if ui.getFocused(WidChannelRack):
+        if not ui.getFocused(WidMixer):
             if channels.isChannelMuted(channels.channelNumber()) :
                 self._send_cached('mute', bytes([0x02, 0x00, 0x10, 0x61, 0x7F]))
             else :
