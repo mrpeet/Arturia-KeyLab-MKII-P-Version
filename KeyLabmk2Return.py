@@ -263,8 +263,14 @@ class KeyLabLightReturn:
                 for i in range(0,16) :
                     self._send_cached(f"seq_{i}", bytes([0x02, 0x00, 0x16, PAD_MAP[i], 0x7F, 0x00, 0x7F, 0x7F]))
         else :
+            # Check Pad Mode and set color accordingly
+            if KLmk2Pr.CURRENT_PAD_MODE == KLmk2Pr.PAD_MODE_CHROMATIC:
+                r, g, b = KLmk2Pr.Hardware.Pads.COLOR_PURPLE_DIM
+            else:
+                r, g, b = KLmk2Pr.Hardware.Pads.COLOR_YELLOW_DIM
+                
             for i in range (len(PAD_MAP)) :
-                    self._send_cached(f"seq_{i}", bytes([0x02, 0x00, 0x16, PAD_MAP[i], 0x7F, 0x00, 0x00, 0x7F]))
+                    self._send_cached(f"seq_{i}", bytes([0x02, 0x00, 0x16, PAD_MAP[i], r, g, b, 0x7F]))
 
 
     def ProcessPlayBlink(self, value):
