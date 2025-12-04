@@ -808,12 +808,12 @@ class KeyLabMidiProcessor:
 
     def ToggleOverdub(self, event):
         transport.globalTransport(midi.FPT_Overdub, 1)
-        self._navigation.HintRefresh("Overdub", title="Overdub")
+        self._navigation.HintRefresh("Overdub", title="")
         self.UpdateDAWButtonFeedback()
 
     def Redo(self, event):
         general.undoDown()
-        self._navigation.HintRefresh("Redo", title="Redo")
+        self._navigation.HintRefresh("Redo", title="")
 
     def SnapToggle(self, event):
         # Toggle between Line (1) and Off (0)
