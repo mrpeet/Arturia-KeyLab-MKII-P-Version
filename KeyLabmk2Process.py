@@ -439,6 +439,7 @@ class KeyLabMidiProcessor:
                 ui.selectBrowserMenuItem()
                 if not ui.isInPopupMenu() :
                     self._navigation.PressRefresh()
+        self.UpdateDAWButtonFeedback()
             
     
     
@@ -454,6 +455,7 @@ class KeyLabMidiProcessor:
         else :
             self._show_and_focus(1)
             self._navigation.ChannelRackRefresh()
+        self.UpdateDAWButtonFeedback()
 
     
     def ToggleMixerChannelRack(self, event) :
@@ -778,10 +780,21 @@ class KeyLabMidiProcessor:
         # User said "visualise their state".
         # Let's try to read it. ui.getSnapMode()
         
+        # ToggleBrowserChannelRack (Global 1)
+        # 100% (127) if Channel Rack (1) focused, 20% (25) if Browser (4) focused
+        # Note: This might not be perfect if neither is focused, but requested behavior is specific.
+        if ui.getFocused(1): # Channel Rack
+            send_feedback(Hardware.DAW.Global.CONTROL_1_2, True)
+        elif ui.getFocused(4): # Browser
+            send_feedback(Hardware.DAW.Global.CONTROL_1_2, False)
+        else:
+            # Default state if neither? Maybe off or dim? Let's keep it dim (False)
+            send_feedback(Hardware.DAW.Global.CONTROL_1_2, False)
+
         # Overdub (Global 3)
-        send_feedback(Hardware.DAW.Global.CONTROL_3_2, transport.isRecording()) # Overdub is often linked to Record/Loop Record? 
-        # Wait, Overdub is specifically Loop Record?
-        # transport.getLoopMode()
+        # transport.getLoopMode() returns 1 if Loop Record is enabled, which is often mapped to Overdub in FL scripts
+        # But let's check if there is a specific Overdub flag. transport.isRecording() is global record.
+        # The original code used transport.getLoopMode() for Overdub feedback.
         send_feedback(Hardware.DAW.Global.CONTROL_3_2, transport.getLoopMode())
 
         # Metronome (Global 4)
@@ -797,7 +810,11 @@ class KeyLabMidiProcessor:
 
     def ToggleOverdub(self, event):
         transport.globalTransport(midi.FPT_Overdub, 1)
-        self._navigation.OverdubRefresh()
+        # Check new state
+        if transport.getLoopMode():
+             self._navigation.HintRefresh("Overdub Mode ON", title="Overdub")
+        else:
+             self._navigation.HintRefresh("Overdub Mode OFF", title="Overdub")
         self.UpdateDAWButtonFeedback()
 
     def Redo(self, event):
