@@ -375,6 +375,11 @@ class KeyLabMidiProcessor:
                 
                 if not PAD_VELOCITY_ENABLED:
                     event.data2 = 127
+                else:
+                    # Velocity On: Pass through original velocity
+                    # Debug: Display received velocity to verify hardware output
+                    # self._navigation.HintRefresh("Pad: " + str(original_note) + " Vel: " + str(event.data2), title="Velocity Check")
+                    pass
                 
                 # Set Pad Color (Active)
                 if 36 <= original_note <= 51:
