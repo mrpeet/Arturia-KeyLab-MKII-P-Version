@@ -156,18 +156,18 @@ class KeyLabMidiProcessor:
             
             # Group 3: DAW Commands
             # Track Controls
-            .NewHandler(Hardware.DAW.Track.CONTROL_1, self.NewPattern, ignore_release) # 8
-            .NewHandler(Hardware.DAW.Track.CONTROL_2, self.FocusMixer, ignore_release) # 16
-            .NewHandler(Hardware.DAW.Track.CONTROL_3, self.SnapToggle, ignore_release) # 0 (Was Overdub)
-            .NewHandler(Hardware.DAW.Track.CONTROL_4, self.TapTempo, ignore_release) # 56
-            .NewHandler(Hardware.DAW.Track.CONTROL_5, self.Redo, ignore_release) # 57
+            .NewHandler(Hardware.DAW.Track.CONTROL_1_1, self.NewPattern, ignore_release) # 8
+            .NewHandler(Hardware.DAW.Track.CONTROL_2_1, self.FocusMixer, ignore_release) # 16
+            .NewHandler(Hardware.DAW.Track.CONTROL_3_1, self.SnapToggle, ignore_release) # 0 (Was Overdub)
+            .NewHandler(Hardware.DAW.Track.CONTROL_4_1, self.TapTempo, ignore_release) # 56
+            .NewHandler(Hardware.DAW.Track.CONTROL_5_1, self.Redo, ignore_release) # 57
             
             # Global Controls
-            .NewHandler(Hardware.DAW.Global.CONTROL_1, self.ToggleBrowserChannelRack, ignore_release) # 74
-            .NewHandler(Hardware.DAW.Global.CONTROL_2, self.TogglePadMode) # 87
-            .NewHandler(Hardware.DAW.Global.CONTROL_3, self.ToggleOverdub, ignore_release) # 88 (Was Snap)
-            .NewHandler(Hardware.DAW.Global.CONTROL_4, self.MetronomeToggle, ignore_release) # 89
-            .NewHandler(Hardware.DAW.Global.CONTROL_5, self.UndoOrCut) # 81 - Handles both press and release
+            .NewHandler(Hardware.DAW.Global.CONTROL_1_2, self.ToggleBrowserChannelRack, ignore_release) # 74
+            .NewHandler(Hardware.DAW.Global.CONTROL_2_2, self.TogglePadMode) # 87
+            .NewHandler(Hardware.DAW.Global.CONTROL_3_2, self.ToggleOverdub, ignore_release) # 88 (Was Snap)
+            .NewHandler(Hardware.DAW.Global.CONTROL_4_2, self.MetronomeToggle, ignore_release) # 89
+            .NewHandler(Hardware.DAW.Global.CONTROL_5_2, self.UndoOrCut) # 81 - Handles both press and release
             
             .NewHandler(Hardware.Transport.REWIND, self.RewindORprevBar)
             .NewHandler(Hardware.Transport.FAST_FORWARD, self.FastForwardORnextBar)
@@ -338,16 +338,16 @@ class KeyLabMidiProcessor:
                     global PAD_VELOCITY_ENABLED
                     PAD_VELOCITY_ENABLED = not PAD_VELOCITY_ENABLED
                     state = "On" if PAD_VELOCITY_ENABLED else "Off"
-                    self._navigation.HintRefresh("Velocity: " + state)
+                    self._navigation.HintRefresh("Velocity: " + state, title="Pad Settings")
                 else:
                     # Toggle Pad Mode
                     global CURRENT_PAD_MODE
                     if CURRENT_PAD_MODE == PAD_MODE_DRUM:
                         CURRENT_PAD_MODE = PAD_MODE_CHROMATIC
-                        self._navigation.HintRefresh("Pads: Chromatic")
+                        self._navigation.HintRefresh("Pads: Chromatic", title="Pad Mode")
                     else:
                         CURRENT_PAD_MODE = PAD_MODE_DRUM
-                        self._navigation.HintRefresh("Pads: FPC / Drum")
+                        self._navigation.HintRefresh("Pads: FPC / Drum", title="Pad Mode")
                     
                     # Update Pad Colors
                     self.UpdatePadColors(CURRENT_PAD_MODE)
@@ -732,14 +732,14 @@ class KeyLabMidiProcessor:
  
     def NewPattern(self, event):
         patterns.findFirstNextEmptyPat(midi.FFNEP_DontPrompt)
-        self._navigation.HintRefresh("New Pattern")
+        self._navigation.HintRefresh("New Pattern", title="Pattern")
 
     def FocusMixer(self, event):
         if not ui.getVisible(midi.widMixer):
             ui.showWindow(midi.widMixer)
         if not ui.getFocused(midi.widMixer):
             ui.setFocused(midi.widMixer)
-        self._navigation.HintRefresh("Mixer Focused")
+        self._navigation.HintRefresh("Mixer Focused", title="Mixer")
 
     def UpdateDAWButtonFeedback(self):
         # Helper to send feedback
@@ -779,13 +779,13 @@ class KeyLabMidiProcessor:
         # Let's try to read it. ui.getSnapMode()
         
         # Overdub (Global 3)
-        send_feedback(Hardware.DAW.Global.CONTROL_3, transport.isRecording()) # Overdub is often linked to Record/Loop Record? 
+        send_feedback(Hardware.DAW.Global.CONTROL_3_2, transport.isRecording()) # Overdub is often linked to Record/Loop Record? 
         # Wait, Overdub is specifically Loop Record?
         # transport.getLoopMode()
-        send_feedback(Hardware.DAW.Global.CONTROL_3, transport.getLoopMode())
+        send_feedback(Hardware.DAW.Global.CONTROL_3_2, transport.getLoopMode())
 
         # Metronome (Global 4)
-        send_feedback(Hardware.DAW.Global.CONTROL_4, transport.isMetronomeEnabled())
+        send_feedback(Hardware.DAW.Global.CONTROL_4_2, transport.isMetronomeEnabled())
         
         # Snap (Track 3)
         # We'll just light it up if Snap is not "None" (assuming 3 is None, need to verify)
@@ -802,17 +802,17 @@ class KeyLabMidiProcessor:
 
     def Redo(self, event):
         general.undoDown()
-        self._navigation.HintRefresh("Redo")
+        self._navigation.HintRefresh("Redo", title="Edit")
 
     def SnapToggle(self, event):
         # Toggle between Line (1) and Off (0)
         # ui.getSnapMode() returns the current snap mode index
         if ui.getSnapMode() == 0:
             ui.snapMode(1) # Set to Line
-            self._navigation.HintRefresh("Snap: Line")
+            self._navigation.HintRefresh("Line", title="Snap")
         else:
             ui.snapMode(0) # Set to Off
-            self._navigation.HintRefresh("Snap: Off")
+            self._navigation.HintRefresh("Off", title="Snap")
         
         self.UpdateDAWButtonFeedback()
 

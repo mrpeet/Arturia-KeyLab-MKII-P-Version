@@ -307,7 +307,7 @@ class NavigationMode:
                                         )
         self._paged_display.SetActivePage('Tracks', expires=self._display_ms)
         
-    def HintRefresh(self, string) :
+    def HintRefresh(self, string, title='Browser') :
         for i in range(len(string)) :
             if (ord(string[i]) not in range(0,127)) :
                 str1 = string[0:i]
@@ -322,13 +322,13 @@ class NavigationMode:
                     "Send file to the trash bin" : "Delete file"
                     }       
             self._paged_display.SetPageLines('Hintpopup',
-                                        line1= 'Browser',
+                                        line1= title,
                                         line2= LABELS.get(ui.getHintMsg())
                                         )
             self._paged_display.SetActivePage('Hintpopup', expires=3000)
         else :
             self._paged_display.SetPageLines('Hint',
-                                            line1= 'Browser',
+                                            line1= title,
                                             line2= string
                                             )
             self._paged_display.SetActivePage('Hint', expires=3000)

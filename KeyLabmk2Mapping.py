@@ -38,19 +38,19 @@ class Hardware:
     # Group 3: DAW Commands
     class DAW:
         class Track:
-            CONTROL_1 = 8
-            CONTROL_2 = 16
-            CONTROL_3 = 0
-            CONTROL_4 = 56
-            CONTROL_5 = 57
+            CONTROL_1_1 = 8
+            CONTROL_2_1 = 16
+            CONTROL_3_1 = 0
+            CONTROL_4_1 = 56
+            CONTROL_5_1 = 57
             ALL = [8, 16, 0, 56, 57]
 
         class Global:
-            CONTROL_1 = 74
-            CONTROL_2 = 87
-            CONTROL_3 = 88
-            CONTROL_4 = 89
-            CONTROL_5 = 81
+            CONTROL_1_2 = 74
+            CONTROL_2_2 = 87
+            CONTROL_3_2 = 88
+            CONTROL_4_2 = 89
+            CONTROL_5_2 = 81
             ALL = [74, 87, 88, 89, 81]
 
     # Group 4: Transport Control
