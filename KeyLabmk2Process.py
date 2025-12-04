@@ -805,14 +805,14 @@ class KeyLabMidiProcessor:
         self._navigation.HintRefresh("Redo")
 
     def SnapToggle(self, event):
-        # Toggle between Line (0) and None (3)
+        # Toggle between Line (1) and Off (0)
         # ui.getSnapMode() returns the current snap mode index
-        if ui.getSnapMode() == 3:
-            ui.snapMode(0) # Set to Line
+        if ui.getSnapMode() == 0:
+            ui.snapMode(1) # Set to Line
             self._navigation.HintRefresh("Snap: Line")
         else:
-            ui.snapMode(3) # Set to None
-            self._navigation.HintRefresh("Snap: None")
+            ui.snapMode(0) # Set to Off
+            self._navigation.HintRefresh("Snap: Off")
         
         self.UpdateDAWButtonFeedback()
 
