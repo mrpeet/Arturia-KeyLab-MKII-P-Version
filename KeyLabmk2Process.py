@@ -792,10 +792,8 @@ class KeyLabMidiProcessor:
             send_feedback(Hardware.DAW.Global.CONTROL_1_2, False)
 
         # Overdub (Global 3)
-        # transport.getLoopMode() returns 1 if Loop Record is enabled, which is often mapped to Overdub in FL scripts
-        # But let's check if there is a specific Overdub flag. transport.isRecording() is global record.
-        # The original code used transport.getLoopMode() for Overdub feedback.
-        send_feedback(Hardware.DAW.Global.CONTROL_3_2, transport.getLoopMode())
+        # Always 100% brightness as requested
+        send_feedback(Hardware.DAW.Global.CONTROL_3_2, True)
 
         # Metronome (Global 4)
         send_feedback(Hardware.DAW.Global.CONTROL_4_2, transport.isMetronomeEnabled())
@@ -810,16 +808,12 @@ class KeyLabMidiProcessor:
 
     def ToggleOverdub(self, event):
         transport.globalTransport(midi.FPT_Overdub, 1)
-        # Check new state
-        if transport.getLoopMode():
-             self._navigation.HintRefresh("Overdub Mode ON", title="Overdub")
-        else:
-             self._navigation.HintRefresh("Overdub Mode OFF", title="Overdub")
+        self._navigation.HintRefresh("Overdub", title="Overdub")
         self.UpdateDAWButtonFeedback()
 
     def Redo(self, event):
         general.undoDown()
-        self._navigation.HintRefresh("Redo", title="Edit")
+        self._navigation.HintRefresh("Redo", title="Redo")
 
     def SnapToggle(self, event):
         # Toggle between Line (1) and Off (0)
