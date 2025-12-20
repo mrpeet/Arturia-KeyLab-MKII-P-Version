@@ -158,16 +158,16 @@ class KeyLabMidiProcessor:
             # Track Controls
             .NewHandler(Hardware.DAW.Track.CONTROL_1_1, self.NewPattern, ignore_release) # 8
             .NewHandler(Hardware.DAW.Track.CONTROL_2_1, self.FocusMixer, ignore_release) # 16
-            .NewHandler(Hardware.DAW.Track.CONTROL_3_1, self.SnapToggle, ignore_release) # 0 (Was Overdub)
+            .NewHandler(Hardware.DAW.Track.CONTROL_3_1, self.SnapToggle, ignore_release) # 0
             .NewHandler(Hardware.DAW.Track.CONTROL_4_1, self.TapTempo, ignore_release) # 56
             .NewHandler(Hardware.DAW.Track.CONTROL_5_1, self.Redo, ignore_release) # 57
             
             # Global Controls
             .NewHandler(Hardware.DAW.Global.CONTROL_1_2, self.ToggleBrowserChannelRack, ignore_release) # 74
             .NewHandler(Hardware.DAW.Global.CONTROL_2_2, self.TogglePadMode) # 87
-            .NewHandler(Hardware.DAW.Global.CONTROL_3_2, self.ToggleOverdub, ignore_release) # 88 (Was Snap)
+            .NewHandler(Hardware.DAW.Global.CONTROL_3_2, self.ToggleOverdub, ignore_release) # 88
             .NewHandler(Hardware.DAW.Global.CONTROL_4_2, self.MetronomeToggle, ignore_release) # 89
-            .NewHandler(Hardware.DAW.Global.CONTROL_5_2, self.UndoOrCut) # 81 - Handles both press and release
+            .NewHandler(Hardware.DAW.Global.CONTROL_5_2, self.UndoOrCut) # 81
             
             .NewHandler(Hardware.Transport.REWIND, self.RewindORprevBar)
             .NewHandler(Hardware.Transport.FAST_FORWARD, self.FastForwardORnextBar)
@@ -177,9 +177,15 @@ class KeyLabMidiProcessor:
             .NewHandler(Hardware.Navigation.LEFT_ARROW, self.previousPattern, ignore_release)
             .NewHandler(Hardware.Navigation.RIGHT_ARROW, self.nextPattern, ignore_release)
             .NewHandler(51, self.ToggleMixerChannelRack, ignore_release)
+            
+            # Group 6: Track Buttons (22-29) and Master Button (30)
+            .NewHandlerForKeys(Hardware.Mixer.TrackButtons.ALL, self.ProcessTrackButton)
             .NewHandlerForKeys(range(8, 16), self.SoloChannel, ignore_press)
             .NewHandlerForKeys(range(16, 24), self.MuteChannel, ignore_press)
-            .NewHandlerForKeys(range(24, 32), self.TrackSelect,ignore_press)
+            # Removed separate TrackSelect range 24-32 to avoid conflict if any overlap, 
+            # though 22-30 covers Group 6. 
+            # Keeping others if they are for specific different modes/banks not covered by Group 6 buttons.
+            
             .NewHandlerForKeys(range(0, 8), self.SnapMode, ignore_release) 
             
         )
@@ -187,8 +193,9 @@ class KeyLabMidiProcessor:
         self._knob_dispatcher = (
             MidiEventDispatcher(by_control_num)
             .NewHandler(Hardware.Navigation.KNOB_TURN, self.OnKnobNavEvent)
-            .NewHandler(Hardware.Navigation.KNOB_TURN, self.OnKnobNavEvent)
-            .NewHandlerForKeys(Hardware.Mixer.Knobs.ALL, self.SetPanTrack)
+            .NewHandlerForKeys(Hardware.Mixer.Knobs.ALL[:-1], self.SetPanTrack) # Knobs 1-8
+            .NewHandler(Hardware.Mixer.Knobs.KNOB_9, self.ProcessMasterKnob)
+            # Faders are handled by Slider/PB dispatcher now
         )      
         
         
@@ -233,11 +240,13 @@ class KeyLabMidiProcessor:
         except Exception as e:
             print("Error initializing pad colors:", e)
         
-        # Initialize DAW Button Feedback
+        # Initialize Dawson Button Feedback
         try:
             self.UpdateDAWButtonFeedback()
         except Exception as e:
             print("Error initializing DAW feedback:", e)
+
+        self._track_button_press_times = {}
 
 
 
@@ -531,29 +540,6 @@ class KeyLabMidiProcessor:
         else :
             self._show_and_focus(WidChannelRack)
     
-    def BankSelect(self, event) :
-        if MIXER_MODE == 1 :
-            self.FakeMIDImsg()
-            if event.controlNum == 46 :
-                AKLmk2.MX_OFFSET -= 1
-                if AKLmk2.MX_OFFSET < 0 :
-                    AKLmk2.MX_OFFSET = 0
-                self._navigation.BankMixRefresh()
-            elif event.controlNum == 47 :
-                if (AKLmk2.MX_OFFSET + 1)*8 < MAX_TRACKS :
-                    AKLmk2.MX_OFFSET += 1
-                    self._navigation.BankMixRefresh()
-        else :
-            self.FakeMIDImsg()
-            if event.controlNum == 46 :
-                AKLmk2.CH_OFFSET -= 1
-                if AKLmk2.CH_OFFSET < 0 :
-                    AKLmk2.CH_OFFSET = 0
-                self._navigation.BankChanRefresh()
-            elif event.controlNum == 47 :
-                if (AKLmk2.CH_OFFSET + 1)*8 < channels.channelCount() :
-                    AKLmk2.CH_OFFSET += 1
-                    self._navigation.BankChanRefresh()
 
 
     def TrackSelect(self, event):
@@ -1023,3 +1009,231 @@ class KeyLabMidiProcessor:
         
     def FakeMIDImsg(self) :
         transport.globalTransport(midi.FPT_Punch,1)
+
+    # GROUP 6: MIXER & PARAMETER CONTROLS
+
+    def SetPanTrack(self, event):
+        # Knobs 1-8 are Relative (CC 16-23)
+        # Event Type: CC (176)
+        # Value logic: 65 = Left (-), 1 = Right (+)
+        
+        knob_cc = event.controlNum
+        try:
+            index = Hardware.Mixer.Knobs.ALL.index(knob_cc)
+        except ValueError:
+            return
+
+        # Determine direction
+        delta = 0
+        if event.data2 == 1:
+            delta = 0.02 # Increment
+        elif event.data2 == 65:
+            delta = -0.02 # Decrement
+        # Handle other potential relative values if necessary (e.g. 2, 66 for faster turns)
+        elif event.data2 < 64:
+            delta = event.data2 * 0.02
+        elif event.data2 > 64:
+            delta = - (event.data2 - 64) * 0.02
+            
+        if delta == 0: return
+
+        if ui.getFocused(WidMixer):
+            track_index = (index) + 8 * AKLmk2.MX_OFFSET + 1
+            if track_index <= MAX_TRACKS:
+                # Get current pan, add delta, clamp
+                current = mixer.getTrackPan(track_index)
+                new_val = max(-1.0, min(1.0, current + delta))
+                mixer.setTrackPan(track_index, new_val)
+                self._navigation.HintRefresh(f"Pan Track {track_index}: {int((new_val+1)/2*100)}%")
+        else:
+            channel_index = (index) + 8 * AKLmk2.CH_OFFSET
+            if channel_index < channels.channelCount():
+                current = channels.getChannelPan(channel_index)
+                new_val = max(-1.0, min(1.0, current + delta))
+                channels.setChannelPan(channel_index, new_val)
+                self._navigation.HintRefresh(f"Pan Channel {channel_index+1}: {int((new_val+1)/2*100)}%")
+
+        if ui.getFocused(WidMixer):
+            track_index = (index) + 8 * AKLmk2.MX_OFFSET + 1
+            if track_index <= MAX_TRACKS:
+                mixer.setTrackPan(track_index, value * 2.0 - 1.0)
+                self._navigation.HintRefresh(f"Pan Track {track_index}: {int(value*100)}%")
+        else:
+            channel_index = (index) + 8 * AKLmk2.CH_OFFSET
+            if channel_index < channels.channelCount():
+                channels.setChannelPan(channel_index, value * 2.0 - 1.0)
+                self._navigation.HintRefresh(f"Pan Channel {channel_index+1}: {int(value*100)}%")
+
+    def SetVolumeTrack(self, event):
+        # Faders 1-9 use Pitch Bend (Status 224-232)
+        # ID is based on Channel (Event Status or MidiChan)
+        # Fader 1 = Ch 1 (224), Fader 9 = Ch 9 (232)
+        
+        # Identify Fader Index directly from MIDI Channel (0-indexed)
+        # event.midiChan should be 0-8 for Faders 1-9
+        # Or status - 224
+        
+        index = event.midiChan
+        if index > 8: return 
+        
+        # Value Logic: Pitch Bend uses MSB (data2) and LSB (data1).
+        # For Volume, MSB (0-127) is sufficient.
+        # PitchBend Range: 0-16383. Center is 8192.
+        # But for Fader, typically 0 to Max (16383).
+        # Let's use 14-bit if possible for smoothness, or just MSB.
+        # event.data2 is MSB.
+        value = (event.data2 * 128 + event.data1) / 16383.0
+        
+        # Check if it's Master Fader (Index 8 / Ch 9)
+        if index == 8:
+            self.ProcessMasterFader(event, value)
+            return
+
+        # Faders 1-8 (Index 0-7)
+        if ui.getFocused(WidMixer):
+            track_index = (index) + 8 * AKLmk2.MX_OFFSET + 1
+            if track_index <= MAX_TRACKS:
+                mixer.setTrackVolume(track_index, value)
+                self._navigation.HintRefresh(f"Vol Track {track_index}: {int(value*100)}%")
+        else:
+            channel_index = (index) + 8 * AKLmk2.CH_OFFSET
+            if channel_index < channels.channelCount():
+                channels.setChannelVolume(channel_index, value)
+                self._navigation.HintRefresh(f"Vol Channel {channel_index+1}: {int(value*100)}%")
+
+    def BankSelect(self, event) :
+        if MIXER_MODE == 1 :
+            self.FakeMIDImsg()
+            if event.controlNum == 46 :
+                AKLmk2.MX_OFFSET -= 1
+                if AKLmk2.MX_OFFSET < 0 :
+                    AKLmk2.MX_OFFSET = 0
+                self._navigation.BankMixRefresh()
+            elif event.controlNum == 47 :
+                if (AKLmk2.MX_OFFSET + 1)*8 < MAX_TRACKS :
+                    AKLmk2.MX_OFFSET += 1
+                    self._navigation.BankMixRefresh()
+            
+            # Update Visual Feedback
+            pass
+
+        else :
+            self.FakeMIDImsg()
+            if event.controlNum == 46 :
+                AKLmk2.CH_OFFSET -= 1
+                if AKLmk2.CH_OFFSET < 0 :
+                    AKLmk2.CH_OFFSET = 0
+                self._navigation.BankChanRefresh()
+            elif event.controlNum == 47 :
+                if (AKLmk2.CH_OFFSET + 1)*8 < channels.channelCount() :
+                    AKLmk2.CH_OFFSET += 1
+                    self._navigation.BankChanRefresh()
+            
+            # Show Red Box in Channel Rack
+            ui.crDisplayRect(0, AKLmk2.CH_OFFSET*8, 8, 4, 1000)
+
+    def ProcessTrackButton(self, event):
+        # Buttons 1-9 (Mapped in Hardware.Mixer.TrackButtons)
+        btn_id = event.data1
+        is_pressed = self._is_pressed(event)
+        
+        # Check for Master Button (Button 9)
+        # We check by Index, not ID, to rely on Mapping order.
+        # Button 9 is the last item (Index 8) in TrackButtons.ALL
+        
+        try:
+            index = Hardware.Mixer.TrackButtons.ALL.index(btn_id)
+        except ValueError:
+            return
+
+        if index == 8: # Button 9 (Master Sep)
+            self.ProcessMasterButton(event)
+            return
+            
+        if index > 7: return # Safety
+
+        if is_pressed:
+            self._track_button_press_times[index] = time.time()
+        else:
+            # Release
+            start_time = self._track_button_press_times.get(index, 0)
+            duration = time.time() - start_time
+            
+            if duration < 1.0:
+                self.ResetPan(index)
+            else:
+                self.ToggleMute(index)
+            
+            # Force LED update immediately
+            self.FakeMIDImsg() 
+
+    def ResetPan(self, index):
+        if ui.getFocused(WidMixer):
+            track_index = (index) + 8 * AKLmk2.MX_OFFSET + 1
+            if track_index <= MAX_TRACKS:
+                mixer.setTrackPan(track_index, 0.0)
+                self._navigation.HintRefresh(f"Reset Pan Track {track_index}")
+        else:
+            channel_index = (index) + 8 * AKLmk2.CH_OFFSET
+            if channel_index < channels.channelCount():
+                channels.setChannelPan(channel_index, 0.0)
+                self._navigation.HintRefresh(f"Reset Pan Channel {channel_index+1}")
+
+    def ToggleMute(self, index):
+        if ui.getFocused(WidMixer):
+            track_index = (index) + 8 * AKLmk2.MX_OFFSET + 1
+            if track_index <= MAX_TRACKS:
+                mixer.muteTrack(track_index) # Toggles
+                state = "Muted" if mixer.isTrackMuted(track_index) else "Unmuted"
+                self._navigation.HintRefresh(f"Track {track_index} {state}")
+        else:
+            channel_index = (index) + 8 * AKLmk2.CH_OFFSET
+            if channel_index < channels.channelCount():
+                channels.muteChannel(channel_index)
+                state = "Muted" if channels.isChannelMuted(channel_index) else "Unmuted"
+                self._navigation.HintRefresh(f"Channel {channel_index+1} {state}")
+
+    def ProcessMasterFader(self, event, value=None):
+        # If called from dispatcher directly (unlikely if PB logic holds), calculate value
+        if value is None:
+            value = (event.data2 * 128 + event.data1) / 16383.0 # PB handling
+            
+        mixer.setTrackVolume(0, value)
+        self._navigation.HintRefresh(f"Master Vol: {int(value*100)}%")
+
+    def ProcessMasterKnob(self, event):
+        # Knob 9: Main Swing
+        # Using Relative Logic (CC 24)
+        
+        delta = 0
+        if event.data2 == 1: delta = 0.02
+        elif event.data2 == 65: delta = -0.02
+        elif event.data2 < 64: delta = event.data2 * 0.02
+        elif event.data2 > 64: delta = - (event.data2 - 64) * 0.02
+        
+        if delta == 0: return
+        
+        # Control Master Pan as fallback
+        current = mixer.getTrackPan(0)
+        new_val = max(-1.0, min(1.0, current + delta))
+        mixer.setTrackPan(0, new_val)
+        self._navigation.HintRefresh(f"Master Pan: {int((new_val+1)/2*100)}%")
+
+    def ProcessMasterButton(self, event):
+        if not self._is_pressed(event):
+            return
+        
+        current = mixer.getTrackStereoSep(0)
+        # Toggle: If merged (1.0) -> sep (0.0). Else -> merged.
+        if abs(current - 1.0) < 0.1:
+            new_val = 0.0
+            state = "Separated"
+            # Button LED: Mint Green (State A) handled in Return
+        else:
+            new_val = 1.0
+            state = "Merged (Mono)"
+            # Button LED: Blinking Red (State B) handled in Return
+            
+        mixer.setTrackStereoSep(0, new_val)
+        self._navigation.HintRefresh(f"Master: {state}")
+

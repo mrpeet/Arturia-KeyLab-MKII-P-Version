@@ -69,40 +69,43 @@ class Hardware:
         KNOB_TURN = 60
         KNOB_PUSH = 84
 
+
+
     # Group 6: Mixer & Parameter Control
     class Mixer:
         class Knobs:
-            KNOB_1 = 74
-            KNOB_2 = 71
-            KNOB_3 = 76
-            KNOB_4 = 77
-            KNOB_5 = 93
-            KNOB_6 = 18
-            KNOB_7 = 19
-            KNOB_8 = 16
-            KNOB_9 = 17
-            ALL = [74, 71, 76, 77, 93, 18, 19, 16, 17]
+            # Based on log: Knob 1 = 16 (0x10). 
+            # Assuming sequential CCs for Knobs in DAW mode (MCU relative?)
+            # MCU V-Pots usually: Ch 1 CC 16, Ch 2 CC 17...
+            # Let's assume standard MCU V-Pot mapping.
+            KNOB_1 = 16
+            KNOB_2 = 17
+            KNOB_3 = 18
+            KNOB_4 = 19
+            KNOB_5 = 20
+            KNOB_6 = 21
+            KNOB_7 = 22
+            KNOB_8 = 23
+            KNOB_9 = 24 # Possible conflict with Button 1 Note 24 if we mix CC/Note? No, distinct types.
+            ALL = [16, 17, 18, 19, 20, 21, 22, 23, 24]
 
         class Faders:
-            FADER_1 = 73
-            FADER_2 = 75
-            FADER_3 = 79
-            FADER_4 = 72
-            FADER_5 = 80
-            FADER_6 = 81
-            FADER_7 = 82
-            FADER_8 = 83
-            FADER_9 = 85
-            ALL = [73, 75, 79, 72, 80, 81, 82, 83, 85]
+            # Faders use Pitch Bend (Statuses 224-232)
+            # We map them by Index (0-8) corresponding to Channels 0-8
+            # Just placeholders here, logic will use Status
+            FADER_1 = 0
+            ALL = range(9)
 
         class TrackButtons:
-            BUTTON_1 = 22
-            BUTTON_2 = 23
-            BUTTON_3 = 24
-            BUTTON_4 = 25
-            BUTTON_5 = 26
-            BUTTON_6 = 27
-            BUTTON_7 = 28
-            BUTTON_8 = 29
-            BUTTON_9 = 30
-            ALL = range(22, 31) # 22 to 30
+            # Mapped to Notes (Group 6 buttons send Note On/Off in DAW mode)
+            BUTTON_1 = 24 # C2
+            BUTTON_2 = 25 # C#2
+            BUTTON_3 = 26 # D2
+            BUTTON_4 = 27 # D#2
+            BUTTON_5 = 28 # E2
+            BUTTON_6 = 29 # F2
+            BUTTON_7 = 30 # F#2
+            BUTTON_8 = 31 # G2
+            BUTTON_9 = 51 # D#4
+            ALL = [24, 25, 26, 27, 28, 29, 30, 31, 51]
+
