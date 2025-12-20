@@ -188,80 +188,77 @@ class KeyLabLightReturn:
             return CHANNEL_MAP
     
 
+    def IntToRGB(self, value):
+        # FL Studio Colors are often 0x00BBGGRR or similar 32-bit int.
+        # We need to extract them.
+        
+        b = (value >> 16) & 0xFF
+        g = (value >> 8) & 0xFF
+        r = value & 0xFF
+        
+        # Scale to 0-127 (MIDI) might not be strictly necessary if SysEx accepts 0-127.
+        return (r//2, g//2, b//2) 
+
     def SelectedChannel(self) :
         # Button 9 (Master Sep) Feedback
-        # ID is 51 (0x33) based on Log (Note 51)
         btn9_id = 51
         sep = mixer.getTrackStereoSep(0)
         is_merged = (abs(sep - 1.0) < 0.1)
         
         if is_merged:
-            # Merged = Blinking Red
             should_light = (int(time.time() * 4) % 2) == 0 # 2Hz blink
             if should_light:
-                # Red On
                 self._send_cached("btn9", bytes([0x02, 0x00, 0x16, btn9_id, 0x7F, 0x00, 0x00, 0x7F]))
             else:
-                # Red Off
                 self._send_cached("btn9", bytes([0x02, 0x00, 0x16, btn9_id, 0x00, 0x00, 0x00, 0x7F]))
         else:
-            # Separated = Mint Green (Solid)
-            # Mint Green approx: R=0, G=127(0x7F), B=80(0x50)?
             self._send_cached("btn9", bytes([0x02, 0x00, 0x16, btn9_id, 0x00, 0x7F, 0x40, 0x7F]))
 
-
-        # Buttons 1-8
-        if KLmk2Pr.MIXER_MODE:
-            offset = AKLmk2.MX_OFFSET
-            base_index = offset * 8 + 1 # Tracks 1-indexed (Bank 0: 1-8)
+        # Buttons 1-8 (24-31)
+        # Context Aware
+        is_mixer = KLmk2Pr.ui.getFocused(WidMixer)
+        
+        offset = AKLmk2.MX_OFFSET if is_mixer else AKLmk2.CH_OFFSET
+        
+        for i in range(8):
+            index = i + (offset * 8)
+            btn_id = SELECT_MAP[i]
             
-            for i in range(8):
-                track_idx = base_index + i
-                led_id = SELECT_MAP[i]
-                cache_key = f"mix_led_{track_idx}"
+            # Determine Color and State
+            if is_mixer:
+                real_index = index + 1 # Mixer Track 1-based
+                if real_index > KLmk2Pr.MAX_TRACKS: 
+                    # Off
+                    self._send_cached(f"btn{i}", bytes([0x02, 0x00, 0x16, btn_id, 0x00, 0x00, 0x00, 0x7F]))
+                    continue
+                    
+                is_sel = (mixer.trackNumber() == real_index)
+                is_muted = mixer.isTrackMuted(real_index)
+                col_int = mixer.getTrackColor(real_index)
+            else:
+                if index >= channels.channelCount():
+                    # Off
+                    self._send_cached(f"btn{i}", bytes([0x02, 0x00, 0x16, btn_id, 0x00, 0x00, 0x00, 0x7F]))
+                    continue
+                    
+                is_sel = channels.isChannelSelected(index)
+                is_muted = channels.isChannelMuted(index)
+                col_int = channels.getChannelColor(index)
 
-                if track_idx <= NB_TRACK_MAX:
-                    # Muted -> Red
-                    if mixer.isTrackMuted(track_idx):
-                        r, g, b = 0x7F, 0x00, 0x00
-                    else:
-                        # Unmuted -> Track Color
-                        # Get Color
-                        c = mixer.getTrackColor(track_idx)
-                        c_r = (c >> 16) & 0xFF
-                        c_g = (c >> 8) & 0xFF
-                        c_b = c & 0xFF
-                        
-                        # Scale to 0-127
-                        c_r = c_r >> 1
-                        c_g = c_g >> 1
-                        c_b = c_b >> 1
-                        
-                        if mixer.isTrackSelected(track_idx):
-                            # Selected -> 100% Brightness
-                            r, g, b = c_r, c_g, c_b
-                        else:
-                            # Idle -> 35% Brightness
-                            r = int(c_r * 0.35)
-                            g = int(c_g * 0.35)
-                            b = int(c_b * 0.35)
-                            # Ensure visible? At least 1 if original was bright?
-                            # 35% of 127 is ~44.
-                    
-                    self._send_cached(cache_key, bytes([0x02, 0x00, 0x16, led_id, r, g, b, 0x7F]))
-                else:
-                    # Out of range -> Off
-                    self._send_cached(cache_key, bytes([0x02, 0x00, 0x16, led_id, 0x00, 0x00, 0x00, 0x7F]))
-                    
-        else:
-            # Channel Rack Mode
-            offset = AKLmk2.CH_OFFSET
-            base_index = offset * 8 # Channels 0-indexed
-            
-            for i in range(8):
-                chan_idx = base_index + i
-                led_id = SELECT_MAP[i]
-                cache_key = f"chan_led_{chan_idx}"
+            # Process Color
+            if is_muted:
+                # Red (Muted)
+                self._send_cached(f"btn{i}", bytes([0x02, 0x00, 0x16, btn_id, 0x7F, 0x00, 0x00, 0x7F]))
+            else:
+                r, g, b = self.IntToRGB(col_int)
+                
+                # If NOT selected, dim the color
+                if not is_sel:
+                    r = int(r * 0.1) # 10% brightness
+                    g = int(g * 0.1)
+                    b = int(b * 0.1)
+                
+                self._send_cached(f"btn{i}", bytes([0x02, 0x00, 0x16, btn_id, r, g, b, 0x7F]))
 
                 if chan_idx < channels.channelCount():
                     if channels.isChannelMuted(chan_idx):

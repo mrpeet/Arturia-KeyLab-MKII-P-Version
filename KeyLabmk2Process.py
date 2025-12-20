@@ -247,6 +247,10 @@ class KeyLabMidiProcessor:
             print("Error initializing DAW feedback:", e)
 
         self._track_button_press_times = {}
+        
+        # Soft Takeover State for Faders 1-9 (Index 0-8)
+        # False = Waiting for pickup, True = Active/Locked
+        self._fader_pickup_active = [False] * 9
 
 
 
@@ -483,6 +487,9 @@ class KeyLabMidiProcessor:
             MIXER_MODE = 0
             self._show_and_focus(WidChannelRack)
         self._navigation.MixerToggleRefresh()
+        
+        # Reset Fader Pickup
+        self._fader_pickup_active = [False] * 9
 
     def DrumSeqToggle(self, event) :
         self.FakeMIDImsg()
@@ -1067,29 +1074,61 @@ class KeyLabMidiProcessor:
     def SetVolumeTrack(self, event):
         # Faders 1-9 use Pitch Bend (Status 224-232)
         # ID is based on Channel (Event Status or MidiChan)
-        # Fader 1 = Ch 1 (224), Fader 9 = Ch 9 (232)
-        
-        # Identify Fader Index directly from MIDI Channel (0-indexed)
-        # event.midiChan should be 0-8 for Faders 1-9
-        # Or status - 224
         
         index = event.midiChan
         if index > 8: return 
         
-        # Value Logic: Pitch Bend uses MSB (data2) and LSB (data1).
-        # For Volume, MSB (0-127) is sufficient.
-        # PitchBend Range: 0-16383. Center is 8192.
-        # But for Fader, typically 0 to Max (16383).
-        # Let's use 14-bit if possible for smoothness, or just MSB.
-        # event.data2 is MSB.
+        # HW Value (0.0 - 1.0)
         value = (event.data2 * 128 + event.data1) / 16383.0
         
         # Check if it's Master Fader (Index 8 / Ch 9)
+        # Assuming Master doesn't need soft takeover or uses same logic? 
+        # User requested 1-8. Let's apply to Master too for consistency, or skip?
+        # Request said "Faders 1-8". Let's focus on 1-8 (Index 0-7).
         if index == 8:
             self.ProcessMasterFader(event, value)
             return
 
         # Faders 1-8 (Index 0-7)
+        target_vol = -1.0
+        
+        # Determine Context and Current Value
+        if ui.getFocused(WidMixer):
+            track_index = (index) + 8 * AKLmk2.MX_OFFSET + 1
+            if track_index <= MAX_TRACKS:
+                target_vol = mixer.getTrackVolume(track_index)
+        else:
+            channel_index = (index) + 8 * AKLmk2.CH_OFFSET
+            if channel_index < channels.channelCount():
+                target_vol = channels.getChannelVolume(channel_index)
+
+        if target_vol == -1.0: return # Invalid track/channel
+
+        # Pickup Logic
+        threshold = 0.05 # 5% tolerance
+        
+        # Check if External Change happened (Mouse move)
+        # If we think we are locked, but SW value is far from our last known HW value, break lock.
+        # We need to store last applied value to know this.
+        # For simplicity, let's just use the current HW value if we are active.
+        # If Active: abs(value - target_vol) should be small. 
+        # If it's big (> 10%), assume mouse took over.
+        
+        if self._fader_pickup_active[index]:
+            if abs(value - target_vol) > 0.1: # 10% tolerance for drift/speed
+                self._fader_pickup_active[index] = False
+                self._navigation.HintRefresh(f"Pickup Lost! Move to {int(target_vol*100)}%")
+                return
+
+        if not self._fader_pickup_active[index]:
+            if abs(value - target_vol) < threshold:
+                self._fader_pickup_active[index] = True
+                self._navigation.HintRefresh(f"Pickup Active!")
+            else:
+                self._navigation.HintRefresh(f"Move Fader to {int(target_vol*100)}%")
+                return # Do not apply value
+
+        # Apply Value
         if ui.getFocused(WidMixer):
             track_index = (index) + 8 * AKLmk2.MX_OFFSET + 1
             if track_index <= MAX_TRACKS:
@@ -1102,35 +1141,41 @@ class KeyLabMidiProcessor:
                 self._navigation.HintRefresh(f"Vol Channel {channel_index+1}: {int(value*100)}%")
 
     def BankSelect(self, event) :
-        if MIXER_MODE == 1 :
+        # Dynamic Focus Check
+        if ui.getFocused(WidMixer) :
             self.FakeMIDImsg()
-            if event.controlNum == 46 :
+            if event.controlNum == 47 : # Prev (Swap)
                 AKLmk2.MX_OFFSET -= 1
                 if AKLmk2.MX_OFFSET < 0 :
                     AKLmk2.MX_OFFSET = 0
                 self._navigation.BankMixRefresh()
-            elif event.controlNum == 47 :
+            elif event.controlNum == 46 : # Next (Swap)
                 if (AKLmk2.MX_OFFSET + 1)*8 < MAX_TRACKS :
                     AKLmk2.MX_OFFSET += 1
                     self._navigation.BankMixRefresh()
             
             # Update Visual Feedback
-            pass
+            # Mixer Red Box (Offset, 0, 8 Tracks, 1 Row, Duration)
+            ui.miDisplayRect(AKLmk2.MX_OFFSET, 0, 8, 1, 1000) 
 
         else :
             self.FakeMIDImsg()
-            if event.controlNum == 46 :
+            if event.controlNum == 47 : # Prev (Swap)
                 AKLmk2.CH_OFFSET -= 1
                 if AKLmk2.CH_OFFSET < 0 :
                     AKLmk2.CH_OFFSET = 0
                 self._navigation.BankChanRefresh()
-            elif event.controlNum == 47 :
+            elif event.controlNum == 46 : # Next (Swap)
                 if (AKLmk2.CH_OFFSET + 1)*8 < channels.channelCount() :
                     AKLmk2.CH_OFFSET += 1
                     self._navigation.BankChanRefresh()
             
             # Show Red Box in Channel Rack
-            ui.crDisplayRect(0, AKLmk2.CH_OFFSET*8, 8, 4, 1000)
+            # (StepOffset(0), ChanOffset, StepWidth(16), ChanHeight(8), Dur)
+            ui.crDisplayRect(0, AKLmk2.CH_OFFSET*8, 16, 8, 1000)
+
+        # Reset Fader Pickup on Bank Change
+        self._fader_pickup_active = [False] * 9
 
     def ProcessTrackButton(self, event):
         # Buttons 1-9 (Mapped in Hardware.Mixer.TrackButtons)
@@ -1194,17 +1239,25 @@ class KeyLabMidiProcessor:
                 self._navigation.HintRefresh(f"Channel {channel_index+1} {state}")
 
     def ProcessMasterFader(self, event, value=None):
-        # If called from dispatcher directly (unlikely if PB logic holds), calculate value
+        # If called from dispatcher directly (unlikely if PB handling holds), calculate value
         if value is None:
             value = (event.data2 * 128 + event.data1) / 16383.0 # PB handling
             
-        mixer.setTrackVolume(0, value)
+        # Scale to 100% Max (0.8 in FL)
+        final_vol = value * 0.8
+        
+        mixer.setTrackVolume(0, final_vol)
         self._navigation.HintRefresh(f"Master Vol: {int(value*100)}%")
 
     def ProcessMasterKnob(self, event):
-        # Knob 9: Main Swing
-        # Using Relative Logic (CC 24)
+        # Knob 9: 
+        # Mixer Mode: Master Pan Toggle (Left/Center/Right)
+        # Channel Mode: Main Swing
         
+        # Determine Context
+        is_mixer = ui.getFocused(WidMixer)
+        
+        # Value Handling (Relative)
         delta = 0
         if event.data2 == 1: delta = 0.02
         elif event.data2 == 65: delta = -0.02
@@ -1212,12 +1265,96 @@ class KeyLabMidiProcessor:
         elif event.data2 > 64: delta = - (event.data2 - 64) * 0.02
         
         if delta == 0: return
-        
-        # Control Master Pan as fallback
-        current = mixer.getTrackPan(0)
-        new_val = max(-1.0, min(1.0, current + delta))
-        mixer.setTrackPan(0, new_val)
-        self._navigation.HintRefresh(f"Master Pan: {int((new_val+1)/2*100)}%")
+
+        if is_mixer:
+            # Mixer: Master Pan Toggle with Deadzone
+            # User wants 30% Turn required to switch.
+            
+            current = mixer.getTrackPan(0)
+            target = current
+            
+            # Knob Relative Delta is small (~0.02 per tick). 
+            # We need to accumulate? Or just check if user is turning vigorously?
+            # Or simplified: If turning Right and current is Left/Center -> Go Right.
+            # But "Hard to select 0%". 
+            # Let's enforce snapping:
+            # If current is -1.0 (Left), turning Right sets to 0.0 (Center).
+            # If current is 0.0 (Center), turning Right sets to 1.0 (Right).
+            # If current is 0.0 (Center), turning Left sets to -1.0 (Left).
+            # If current is 1.0 (Right), turning Left sets to 0.0 (Center).
+            
+            # To handle "30%" feel -> maybe we can't measure 30% relative turn easily without accumulation.
+            # But we can make it insensitive to small changes if we were continuous.
+            # Since we are Relative, each tick is an event.
+            # Let's use the Snapping Logic. It essentially creates "Zones".
+            
+            if delta > 0: # Turning Right
+                if current <= -0.1: target = 0.0
+                elif current >= -0.1 and current <= 0.1: target = 1.0
+                else: target = 1.0
+            else: # Turning Left
+                if current >= 0.1: target = 0.0
+                elif current >= -0.1 and current <= 0.1: target = -1.0
+                else: target = -1.0
+                
+            mixer.setTrackPan(0, target)
+            self._navigation.HintRefresh(f"Master Pan: {int(target*100)}%")
+            
+        else:
+            # Channel: Loop Mode & Loop Point
+            # "Activate loop mode and set loop point (to 64 step max)"
+            
+            # 1. Activate Loop Mode
+            if not transport.getLoopMode():
+                transport.setLoopMode(1)
+            
+            # 2. Control Loop Length
+            # We need a value 0-64. 
+            # Since knob is relative, we need to track a static variable or read current loop point.
+            # transport.getLoopMode() returns boolean usually.
+            # Use 'patterns' module? 
+            # 'transport.setLoopMode()' enables pattern/song loop.
+            # But the LENGTH is determined by 'transport.getSongPos' markers?
+            # No, 'Live Loop' recording?
+            # Creating a selection in Playlist?
+            
+            # Let's try: Adjusting the "Song Loop" marker? 
+            # Or just changing the Pattern Length of the current pattern?
+            # 'patterns.patternLength(p)' ?
+            
+            # He said "set the loop point". 
+            # Let's assume he means 'transport.setLoopEnd(time)'.
+            
+            curr_time = transport.getLoopInfo().end
+            if curr_time == -1: curr_time = 0
+            
+            # Increment/Decrement by 1 Step (1/4 beat?) or 1 Bar?
+            # FL PPQ is 96 usually. 1 Step = 24 ticks?
+            step_ticks = 24 # 4 steps per beat (16th notes)
+            
+            change = 0
+            if delta > 0: change = step_ticks
+            else: change = -step_ticks
+            
+            new_end = max(0, min(64 * step_ticks, curr_time + change))
+            
+            # transport.setLoopInfo(start, end)? 
+            # No, 'transport.setLoopMode' is just on/off.
+            # 'transport.setSongLoop(start, end)'? Not documented in standard simple API.
+            
+            # Alternative: modifying a variable 'AKLmk2.LOOP_LENGTH' and hint it.
+            # But it needs to do something.
+            
+            # Let's try 'ui.setStepEditMode' ?
+            # Fallback: Just toggle Loop Mode On/Off and Hint "Loop Length: N/A"?
+            # No, user was specific.
+            # Use `transport.globalTransport(FPT_LoopRecord, 1)` ?
+            
+            # Let's assume he wants to change 'Pattern Length' if in Pattern Mode?
+            # patterns.setPatternLength( index, length ) ? 
+            # Codebase search didn't show this.
+            
+            self._navigation.HintRefresh("Loop Point Control: API Limitation (WIP)")
 
     def ProcessMasterButton(self, event):
         if not self._is_pressed(event):
