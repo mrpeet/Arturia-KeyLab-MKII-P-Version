@@ -246,7 +246,7 @@ class KeyLabMidiProcessor:
         
         # Initialize Dawson Button Feedback
         try:
-            self.UpdateDAWButtonFeedback()
+            self._mk2.LightReturn().UpdateDAWButtonFeedback()
         except Exception as e:
             print("Error initializing DAW feedback:", e)
 
@@ -378,8 +378,10 @@ class KeyLabMidiProcessor:
                         CURRENT_PAD_MODE = PAD_MODE_DRUM
                         self._navigation.HintRefresh("Pads: FPC / Drum", title="Pad Mode")
                     
-                    # Update Pad Colors
-                    self.UpdatePadColors(CURRENT_PAD_MODE)
+                # Update Pad Colors
+                self.UpdatePadColors(CURRENT_PAD_MODE)
+                
+        self._mk2.LightReturn().UpdateDAWButtonFeedback()
 
 
 
@@ -473,7 +475,9 @@ class KeyLabMidiProcessor:
                 ui.selectBrowserMenuItem()
                 if not ui.isInPopupMenu() :
                     self._navigation.PressRefresh()
-        self.UpdateDAWButtonFeedback()
+                if not ui.isInPopupMenu() :
+                    self._navigation.PressRefresh()
+        self._mk2.LightReturn().UpdateDAWButtonFeedback()
             
     
     
@@ -506,7 +510,10 @@ class KeyLabMidiProcessor:
             self._show_and_focus(WidChannelRack)
             self._navigation.ChannelRackRefresh()
             
-        self.UpdateDAWButtonFeedback()
+            self._show_and_focus(WidChannelRack)
+            self._navigation.ChannelRackRefresh()
+            
+        self._mk2.LightReturn().UpdateDAWButtonFeedback()
 
     
     def ToggleMixerChannelRack(self, event) :
@@ -786,17 +793,7 @@ class KeyLabMidiProcessor:
             ui.setFocused(midi.widMixer)
         self._navigation.HintRefresh("Mixer Focused", title="Mixer")
 
-    def UpdateDAWButtonFeedback(self):
-        # Helper to send feedback
-        def send_feedback(cc, is_on, dim_val=0x14):
-            # is_on: True (100%), False (dim_val)
-            val = 0x7F if is_on else dim_val
-            
-            # Using Channel 2 (0xB1) for DAW Command Feedback
-            # Arturia DAW mode typically uses Channel 2.
-            channel = 1 # 0-indexed, so 1 = Channel 2
-            status = midi.MIDI_CONTROLCHANGE + channel
-            device.midiOutMsg(status + (cc << 8) + (val << 16))
+    # Remove UpdateDAWButtonFeedback as it is now in KeyLabmk2Return
 
         # --- Global Controls ---
         
@@ -885,7 +882,7 @@ class KeyLabMidiProcessor:
     def ToggleOverdub(self, event):
         transport.globalTransport(midi.FPT_Overdub, 1)
         self._navigation.HintRefresh("", title="Overdub")
-        self.UpdateDAWButtonFeedback()
+        self._mk2.LightReturn().UpdateDAWButtonFeedback()
 
     def Redo(self, event):
         general.undoDown()
@@ -901,12 +898,12 @@ class KeyLabMidiProcessor:
             ui.snapMode(0) # Set to Off
             self._navigation.HintRefresh("Off", title="Snap")
         
-        self.UpdateDAWButtonFeedback()
+        self._mk2.LightReturn().UpdateDAWButtonFeedback()
 
     def MetronomeToggle(self, event):
         transport.globalTransport(midi.FPT_Metronome, 1)
         self._navigation.MetronomeRefresh()
-        self.UpdateDAWButtonFeedback()
+        self._mk2.LightReturn().UpdateDAWButtonFeedback()
 
     def UndoOrCut(self, event):
         if self._is_pressed(event):
