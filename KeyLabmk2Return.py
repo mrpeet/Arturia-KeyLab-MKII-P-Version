@@ -432,44 +432,34 @@ class KeyLabLightReturn:
         
         # Loop (CC 86 / ID 0x6F)
         # Using transport.getLoopMode() (Song Loop) or ui.isLoopRecEnabled() (Loop Record)
-        # Let's check both or prefer Loop Record (standard mapping)
+        # Check both or prefer Loop Record (standard mapping)
         is_loop = ui.isLoopRecEnabled()
         send_sysex_feedback(0x6F, is_loop)
 
+        # Rewind (CC 91) & Fast Forward (CC 92)
+        # User requested Always 100%
+        send_cc_feedback(91, True)
+        send_cc_feedback(92, True)
+
 
         # --- Group 3: Global Controls ---
-        # Metronome (CC 89 / ID 0x68) -> WORKING
+        # Metronome (CC 89 / ID 0x68) -> WORKING (State Based)
         is_metro = ui.isMetronomeEnabled()
         send_sysex_feedback(0x68, is_metro)
         
         # Others: IDs unknown. Use CC Feedback on Ch 1/2.
         
-        # Global 1: Browser (CC 74)
-        is_browser = ui.getFocused(WidBrowser)
-        send_cc_feedback(74, is_browser)
+        # Global 1: Browser (CC 74) -> Always 100%
+        send_cc_feedback(74, True)
         
-        # Global 2: Pad Mode (CC 87)
-        # Light up if Pad Mode is Drum (0) as 'Active' state? Or Link it?
-        # Let's default to OFF (Dim) normally, ON if Drum Mode.
-        is_drum_mode = (KLmk2Pr.CURRENT_PAD_MODE == KLmk2Pr.PAD_MODE_DRUM)
-        send_cc_feedback(87, is_drum_mode)
+        # Global 2: Pad Mode (CC 87) -> Always 100%
+        send_cc_feedback(87, True)
         
-        # Global 3: Overdub (CC 88)
-        # Use ui.isLoopRecEnabled() if Overdub is linked to Loop Record?
-        # User requested fix. We'll use transport.getLoopMode() as proxy or ui.isOverdubEnabled() if available.
-        try:
-             is_overdub = ui.isOverdubEnabled()
-        except AttributeError:
-             is_overdub = False
-        send_cc_feedback(88, is_overdub)
+        # Global 3: Overdub (CC 88) -> Always 100%
+        send_cc_feedback(88, True)
         
-        # Global 5: Undo (CC 81)
-        # Momentary blink? Always Dim?
-        # Let's set to Dim (Off) + Blink logic handle elsewhere?
-        # User wants "Light up on press".
-        # If we set it here to 0 (or Dim), it stays Dim.
-        # We'll set it to Dim (0x14) base state.
-        send_cc_feedback(81, False) 
+        # Global 5: Undo (CC 81) -> Always 100%
+        send_cc_feedback(81, True) 
 
 
         # --- Group 3: Track Controls ---
@@ -490,9 +480,8 @@ class KeyLabLightReturn:
         # Momentary. Base Dim.
         send_cc_feedback(56, False)
         
-        # Track 5: Redo (CC 57)
-        # Momentary. Base Dim.
-        send_cc_feedback(57, False)
+        # Track 5: Redo (CC 57) -> Always 100%
+        send_cc_feedback(57, True)
 
 
     def NotBlinkingLed(self) :
