@@ -432,56 +432,61 @@ class KeyLabLightReturn:
         
         # Loop (CC 86 / ID 0x6F)
         # Using transport.getLoopMode() (Song Loop) or ui.isLoopRecEnabled() (Loop Record)
-        # Check both or prefer Loop Record (standard mapping)
         is_loop = ui.isLoopRecEnabled()
         send_sysex_feedback(0x6F, is_loop)
 
-        # Rewind (CC 91) & Fast Forward (CC 92)
-        # User requested Always 100%
-        send_cc_feedback(91, True)
-        send_cc_feedback(92, True)
+        # Rewind (ID 0x6A?) & Fast Forward (ID 0x6B?)
+        # Logic matches sequence: 6A, 6B, 6C(Stop), 6D(Play)...
+        send_sysex_feedback(0x6A, True)
+        send_sysex_feedback(0x6B, True)
 
 
         # --- Group 3: Global Controls ---
-        # Metronome (CC 89 / ID 0x68) -> WORKING (State Based)
+        # Metronome (CC 89 / ID 0x68) -> WORKING
         is_metro = ui.isMetronomeEnabled()
         send_sysex_feedback(0x68, is_metro)
         
-        # Others: IDs unknown. Use CC Feedback on Ch 1/2.
+        # Others: Using guessed SysEx IDs based on sequence 0x65-0x69
         
-        # Global 1: Browser (CC 74) -> Always 100%
-        send_cc_feedback(74, True)
+        # Global 1: Browser (ID 0x65?)
+        # Note: 0x65 was used for "Countdown" in original code. 
+        # On KeyLab MkII, Global 1 is often Save/User defined.
+        send_sysex_feedback(0x65, True)
         
-        # Global 2: Pad Mode (CC 87) -> Always 100%
-        send_cc_feedback(87, True)
+        # Global 2: Pad Mode (ID 0x66?)
+        send_sysex_feedback(0x66, True)
         
-        # Global 3: Overdub (CC 88) -> Always 100%
-        send_cc_feedback(88, True)
+        # Global 3: Overdub (ID 0x67?)
+        send_sysex_feedback(0x67, True)
         
-        # Global 5: Undo (CC 81) -> Always 100%
-        send_cc_feedback(81, True) 
+        # Global 5: Undo (ID 0x69 Failed)
+        # Trying 0x64 (Gap before Global 1) and 0x5D (Gap after Track 5) and 0x69 again.
+        # One of these should be it.
+        send_sysex_feedback(0x64, True) # Try 0x64
+        send_sysex_feedback(0x5D, True) # Try 0x5D
+        send_sysex_feedback(0x69, True) # Keep 0x69 just in case it needed a refresh
 
 
         # --- Group 3: Track Controls ---
-        # Track 1: New Pattern (CC 8)
-        # Momentary. Base Dim.
-        send_cc_feedback(8, False)
+        # IDs unknown. Trying 0x58-0x5C based on patterns (or 0x20+).
+        # Let's try 0x58, 0x59, 0x5A, 0x5B, 0x5C.
         
-        # Track 2: Focus Mixer (CC 16)
+        # Track 1: New Pattern
+        send_sysex_feedback(0x58, False) # Momentary
+        
+        # Track 2: Focus Mixer
         is_mixer = ui.getFocused(WidMixer)
-        send_cc_feedback(16, is_mixer)
+        send_sysex_feedback(0x59, is_mixer)
         
-        # Track 3: Snap (CC 0)
-        # On if Snap != None (3)
+        # Track 3: Snap
         is_snap = (ui.getSnapMode() != 3)
-        send_cc_feedback(0, is_snap)
+        send_sysex_feedback(0x5A, is_snap)
         
-        # Track 4: Tap Tempo (CC 56)
-        # Momentary. Base Dim.
-        send_cc_feedback(56, False)
+        # Track 4: Tap Tempo
+        send_sysex_feedback(0x5B, False) # Momentary
         
-        # Track 5: Redo (CC 57) -> Always 100%
-        send_cc_feedback(57, True)
+        # Track 5: Redo
+        send_sysex_feedback(0x5C, True) # Always On
 
 
     def NotBlinkingLed(self) :
