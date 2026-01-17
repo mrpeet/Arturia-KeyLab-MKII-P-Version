@@ -28,7 +28,7 @@ This document provides an overview of all defined surface controllers, their gro
 ### Global Controls
 | Control | CC | Function | Description |
 | :--- | :--- | :--- | :--- |
-| **Control 1** | `74` | `ToggleBrowserChannelRack` | Toggles focus between Browser and Channel Rack. |
+| **Control 1** | `74` | `ToggleBrowserChannelRack` | Toggles focus between Channel Rack, Browser, and Mixer. |
 | **Control 2** | `87` | `TogglePadMode` | **Short Press**: Toggles Pads between FPC/Drum and Chromatic modes.<br>**Long Press**: Toggles Pad Velocity On/Off. |
 | **Control 3** | `88` | `ToggleOverdub` | Toggles Overdub recording mode. |
 | **Control 4** | `89` | `MetronomeToggle` | Toggles the Metronome. |

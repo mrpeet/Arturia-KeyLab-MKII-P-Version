@@ -261,6 +261,13 @@ class NavigationMode:
                                             )
             self._paged_display.SetActivePage('Mixer', expires=self._display_ms)
             
+    def MixerWindowRefresh(self) :
+        self._paged_display.SetPageLines('MixerWin',
+                                        line1= 'MIXER',
+                                        line2= ''
+                                        )
+        self._paged_display.SetActivePage('MixerWin', expires=self._display_ms)
+            
     
     def BarRefresh(self) :
         bar = str(KLmk2Pr.RECT_OFFSET + 1)

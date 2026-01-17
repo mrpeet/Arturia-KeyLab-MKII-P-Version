@@ -501,7 +501,7 @@ class KeyLabMidiProcessor:
             self._navigation.BrowserRefresh()
         elif ui.getFocused(WidBrowser):
             self._show_and_focus(WidMixer)
-            self._navigation.MixerToggleRefresh()
+            self._navigation.MixerWindowRefresh()
         elif ui.getFocused(WidMixer):
             self._show_and_focus(WidChannelRack)
             self._navigation.ChannelRackRefresh()
