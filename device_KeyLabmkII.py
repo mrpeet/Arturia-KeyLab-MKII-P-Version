@@ -83,6 +83,8 @@ class MidiControllerConfig :
 
 def OnMidiMsg(event) :
     process = _processor.ProcessEvent(event)
+    if not process:
+        print("Unknown ID: " + str(event.midiId) + " Data1: " + str(event.data1) + " Data2: " + str(event.data2))
 
 
 
@@ -157,6 +159,7 @@ def OnIdle():
 # Function called on a memory switch
 
 def OnSysEx(event) :
+    print("SysEx: " + str(event.sysex))
     if event.sysex == b'\xf0\x00 k\x7fB\x02\x00\x00\x15\x00\xf7' :
         ui.setFocused(1)
         OnRefresh(32)
