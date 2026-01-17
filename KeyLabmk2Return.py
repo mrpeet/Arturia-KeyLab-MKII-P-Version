@@ -189,24 +189,23 @@ class KeyLabLightReturn:
     
 
     def IntToRGB(self, value):
-        # FL Studio Colors are often 0x00BBGGRR or similar 32-bit int.
-        # We need to extract them.
-        
+        # FL Studio Colors are often 0xBBGGRR or similar.
+        # Standard INT in Python from FL API seems to be BGR or RGB depending on context?
+        # Let's try standard extraction.
+        # If value is 0xBBGGRR
         b = (value >> 16) & 0xFF
         g = (value >> 8) & 0xFF
         r = value & 0xFF
-        
-        # Scale to 0-127 (MIDI) might not be strictly necessary if SysEx accepts 0-127.
-        return (r//2, g//2, b//2) 
+        return r, g, b
 
     def SelectedChannel(self) :
-        # Button 9 (Master Sep) Feedback
+        # Update Button 9 (Master Sep) Feedback first
         btn9_id = 51
         sep = mixer.getTrackStereoSep(0)
         is_merged = (abs(sep - 1.0) < 0.1)
         
         if is_merged:
-            should_light = (int(time.time() * 4) % 2) == 0 # 2Hz blink
+            should_light = (int(time.time() * 4) % 2) == 0 
             if should_light:
                 self._send_cached("btn9", bytes([0x02, 0x00, 0x16, btn9_id, 0x7F, 0x00, 0x00, 0x7F]))
             else:
@@ -214,84 +213,96 @@ class KeyLabLightReturn:
         else:
             self._send_cached("btn9", bytes([0x02, 0x00, 0x16, btn9_id, 0x00, 0x7F, 0x40, 0x7F]))
 
-        # Buttons 1-8 (24-31)
-        # Context Aware
-        is_mixer = KLmk2Pr.ui.getFocused(WidMixer)
+        # Track Buttons 1-8
         
-        offset = AKLmk2.MX_OFFSET if is_mixer else AKLmk2.CH_OFFSET
+        # Determine Context
+        is_mixer_focused = ui.getFocused(WidMixer)
+        # Fallback to internal flag if focus check is unreliable or user toggled mode manually without focus change
+        # But generally focus is best. Let's sync KLmk2Pr.MIXER_MODE if we can, or just use focus.
+        # The user mentioned: "FL Studio’s API does not natively provide a direct “focused window” state" 
+        # Wait, user prompt says: "detecting Focused Channel/Fader ... channels.selectedChannel() ... mixer.getTrackSelection()"
+        # And "FL Studio’s API does not natively provide a direct 'focused window' state". 
+        # ACTUALLY, ui.getFocused(WidMixer) IS available and works for many windows. 
+        # If user says it doesn't provide it, maybe they mean for specific sub-windows? 
+        # I will trust ui.getFocused(WidMixer) for now as I saw it used in KeyLabmk2Process.py.
         
-        for i in range(8):
-            index = i + (offset * 8)
-            btn_id = SELECT_MAP[i]
+        # We need to calculate which bank/offset we are in.
+        # KeyLabmk2Pages.py/Navigation likely handles the offset variables (AKLmk2.MX_OFFSET, AKLmk2.CH_OFFSET).
+        
+        if is_mixer_focused:
+            offset = AKLmk2.MX_OFFSET
+            base_index = offset * 8 + 1 # Mixer tracks are 1-based usually for getTrackColor? 
+            # mixer.getTrackColor(0) is Master. mixer.getTrackColor(1) is Insert 1.
+            # Our buttons 1-8 map to checks 1-8, 9-16 etc.
             
-            # Determine Color and State
-            if is_mixer:
-                real_index = index + 1 # Mixer Track 1-based
-                if real_index > KLmk2Pr.MAX_TRACKS: 
-                    # Off
-                    self._send_cached(f"btn{i}", bytes([0x02, 0x00, 0x16, btn_id, 0x00, 0x00, 0x00, 0x7F]))
-                    continue
-                    
-                is_sel = (mixer.trackNumber() == real_index)
-                is_muted = mixer.isTrackMuted(real_index)
-                col_int = mixer.getTrackColor(real_index)
-            else:
-                if index >= channels.channelCount():
-                    # Off
-                    self._send_cached(f"btn{i}", bytes([0x02, 0x00, 0x16, btn_id, 0x00, 0x00, 0x00, 0x7F]))
-                    continue
-                    
-                is_sel = channels.isChannelSelected(index)
-                is_muted = channels.isChannelMuted(index)
-                col_int = channels.getChannelColor(index)
+            for i in range(8):
+                track_idx = base_index + i
+                btn_id = SELECT_MAP[i]
+                cache_key = f"btn_rgb_{i}" # Cache by Physical Button Index, NOT Track Index!
 
-            # Process Color
-            if is_muted:
-                # Red (Muted)
-                self._send_cached(f"btn{i}", bytes([0x02, 0x00, 0x16, btn_id, 0x7F, 0x00, 0x00, 0x7F]))
-            else:
-                r, g, b = self.IntToRGB(col_int)
-                
-                # If NOT selected, dim the color
-                if not is_sel:
-                    r = int(r * 0.1) # 10% brightness
-                    g = int(g * 0.1)
-                    b = int(b * 0.1)
-                
-                self._send_cached(f"btn{i}", bytes([0x02, 0x00, 0x16, btn_id, r, g, b, 0x7F]))
+                if track_idx > KLmk2Pr.MAX_TRACKS:
+                    self._send_cached(cache_key, bytes([0x02, 0x00, 0x16, btn_id, 0x00, 0x00, 0x00, 0x7F]))
+                    continue
 
-                if chan_idx < channels.channelCount():
-                    if channels.isChannelMuted(chan_idx):
-                        r, g, b = 0x7F, 0x00, 0x00
-                    else:
-                        c = channels.getChannelColor(chan_idx)
-                        # FL Channel Color might be BGR or RGB. Assuming standard integer 0x00RRGGBB?
-                        # channels.getChannelColor returns integer. Usually 0xBBGGRR in FL?? or 0xRRGGBB.
-                        # Testing needed. Assuming same as mixer for now (standard FL 3-byte).
-                        # Actually standard FL color int is often BGR.
-                        # Let's assume (c >> 16) & 0xFF is Blue?
-                        # Wait, mixer.getTrackColor usually returns RRGGBB (Python API dependent). 
-                        # I'll stick to (c>>16)=R, (c>>8)=G, c=B. Even if swapped, it just swaps R/B.
-                        
-                        c_r = (c >> 16) & 0xFF
-                        c_g = (c >> 8) & 0xFF
-                        c_b = c & 0xFF
-                        
-                        c_r >>= 1
-                        c_g >>= 1
-                        c_b >>= 1
-                        
-                        if channels.isChannelSelected(chan_idx):
-                            r, g, b = c_r, c_g, c_b
-                        else:
-                            r = int(c_r * 0.35)
-                            g = int(c_g * 0.35)
-                            b = int(c_b * 0.35)
-                            
-                    self._send_cached(cache_key, bytes([0x02, 0x00, 0x16, led_id, r, g, b, 0x7F]))
+                is_selected = (mixer.trackNumber() == track_idx)
+                is_muted = mixer.isTrackMuted(track_idx)
+                
+                if is_muted:
+                     # Red for Muted
+                    self._send_cached(cache_key, bytes([0x02, 0x00, 0x16, btn_id, 0x7F, 0x00, 0x00, 0x7F]))
                 else:
-                    self._send_cached(cache_key, bytes([0x02, 0x00, 0x16, led_id, 0x00, 0x00, 0x00, 0x7F]))
+                    col = mixer.getTrackColor(track_idx)
+                    r, g, b = self.IntToRGB(col)
+                    
+                    # If not selected, dim it
+                    if not is_selected:
+                        # Simple dimming
+                        r = r // 8
+                        g = g // 8
+                        b = b // 8
+                        # Ensure at least some visibility if it was bright? Or just allow it to be very dim.
+                    
+                    # Ensure range 0-127
+                    r = min(127, max(0, r))
+                    g = min(127, max(0, g))
+                    b = min(127, max(0, b))
 
+                    self._send_cached(cache_key, bytes([0x02, 0x00, 0x16, btn_id, r, g, b, 0x7F]))
+
+        else:
+            # Channel Rack Mode
+            offset = AKLmk2.CH_OFFSET
+            base_index = offset * 8 
+            
+            for i in range(8):
+                chan_idx = base_index + i
+                btn_id = SELECT_MAP[i]
+                cache_key = f"btn_rgb_{i}"
+
+                if chan_idx >= channels.channelCount():
+                     self._send_cached(cache_key, bytes([0x02, 0x00, 0x16, btn_id, 0x00, 0x00, 0x00, 0x7F]))
+                     continue
+
+                is_selected = channels.isChannelSelected(chan_idx)
+                is_muted = channels.isChannelMuted(chan_idx)
+
+                if is_muted:
+                    # Red for Muted
+                    self._send_cached(cache_key, bytes([0x02, 0x00, 0x16, btn_id, 0x7F, 0x00, 0x00, 0x7F]))
+                else:
+                    col = channels.getChannelColor(chan_idx)
+                    r, g, b = self.IntToRGB(col)
+
+                    if not is_selected:
+                        r = r // 8
+                        g = g // 8
+                        b = b // 8
+                    
+                    r = min(127, max(0, r))
+                    g = min(127, max(0, g))
+                    b = min(127, max(0, b))
+
+                    self._send_cached(cache_key, bytes([0x02, 0x00, 0x16, btn_id, r, g, b, 0x7F]))
 
 
     def SequencerReturn(self) :
@@ -389,219 +400,21 @@ class KeyLabLightReturn:
         if self._cache.get('static_leds_sent'):
             return
 
+        # Navigation Keys: Left (0x62/98), Right (0x63/99)
         send_to_device(bytes([0x02, 0x00, 0x10, 0x62, 0x7F]))
         send_to_device(bytes([0x02, 0x00, 0x10, 0x63, 0x7F]))
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x64, 0x7F]))
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x65, 0x7F]))
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x66, 0x7F]))
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x67, 0x7F]))
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x69, 0x7F]))
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x6A, 0x7F]))
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x6B, 0x7F]))
         
-        # CENTER LED (Navigation?)
-        # Original: 0x1A, 0x1B. 
-        # Adding Navigation Keys: Left (0x62/98), Right (0x63/99), Knob (0x54/84)
+        # Track Buttons (0x64 - 0x6B) are handled by SelectedChannel with RGB.
+        # Do NOT set them here, otherwise it overwrites with White.
         
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x1A, 0x7F]))
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x1B, 0x7F]))
-        
-        # Try to light up Navigation Keys (100% brightness)
-        # Left Arrow
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x62, 0x7F]))
-        # Right Arrow
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x63, 0x7F]))
-        # Knob Push / Center
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x54, 0x7F]))
-        
-        # CHANNELS LEDS
-        send_to_device(bytes([0x02, 0x00, 0x16, 0x2A, 0x7F, 0x7F, 0x7F, 0x7F]))
-        
-        self._cache['static_leds_sent'] = True
-
-    
-
-    def SelectedChannel(self) :
-        # Optimization: Construct the full message payload and check against cache
-        # instead of sending individual messages.
-        
-        current_state_key = f"selected_ch_{KLmk2Pr.MIXER_MODE}_{AKLmk2.MX_OFFSET if KLmk2Pr.MIXER_MODE else AKLmk2.CH_OFFSET}_{channels.channelNumber() if not KLmk2Pr.MIXER_MODE else mixer.trackNumber()}"
-        
-        # We also need to account for selection/mute changes in the bank
-        # This is complex to cache perfectly without reading all states, 
-        # but we can at least prevent re-sending if nothing changed in the focused window/bank.
-        
-        # For now, let's just cache the individual LED messages to avoid spamming the same color.
-        
-        if KLmk2Pr.MIXER_MODE :
-            CHANNEL_MAP = self.SetChannelMap()
-            ACTIVE_CHANNEL = mixer.trackNumber()-1
-            BANK_SELECTED = AKLmk2.MX_OFFSET
-            for j in range(len(CHANNEL_MAP[BANK_SELECTED])) :
-                if CHANNEL_MAP[BANK_SELECTED][j] == 1 :
-                    index = j+(8*BANK_SELECTED)+1
-                    cache_key = f"sel_mix_{j}"
-                    msg = None
-                    
-                    if ACTIVE_CHANNEL//8 != BANK_SELECTED :
-                        if mixer.isTrackSelected(index) and not mixer.isTrackMuted(index) :
-                            msg = bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x7F, 0x7F, 0x00, 0x7F])
-                        elif mixer.isTrackSelected(index) and mixer.isTrackMuted(index) :
-                            msg = bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x7F, 0x00, 0x00, 0x7F])
-                        elif not mixer.isTrackSelected(index) and not mixer.isTrackMuted(index) :
-                            msg = bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x00, 0x00, 0x7F, 0x7F])
-                        elif not mixer.isTrackSelected(index) and mixer.isTrackMuted(index) :
-                            msg = bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x7F, 0x00, 0x00, 0x7F])
-                    elif ACTIVE_CHANNEL//8 == BANK_SELECTED :
-                        if mixer.isTrackSelected(index) and not mixer.isTrackMuted(index) :
-                            msg = bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x7F, 0x7F, 0x00, 0x7F])
-                        elif mixer.isTrackSelected(index) and mixer.isTrackMuted(index) :
-                            msg = bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x7F, 0x00, 0x00, 0x7F])
-                        elif not mixer.isTrackSelected(index) and not mixer.isTrackMuted(index) :
-                            msg = bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x00, 0x00, 0x7F, 0x7F])
-                        elif not mixer.isTrackSelected(index) and mixer.isTrackMuted(index) :
-                            msg = bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x7F, 0x00, 0x00, 0x7F])
-                    
-                    if msg: self._send_cached(cache_key, msg)
-
-                else :
-                    self._send_cached(f"sel_mix_{j}", bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x00, 0x00, 0x00, 0x7F]))
-        else :
-            CHANNEL_MAP = self.SetChannelMap()
-            ACTIVE_CHANNEL = channels.channelNumber()
-            BANK_SELECTED = AKLmk2.CH_OFFSET
-            for j in range(len(CHANNEL_MAP[BANK_SELECTED])) :
-                if CHANNEL_MAP[BANK_SELECTED][j] == 1 :
-                    cache_key = f"sel_chan_{j}"
-                    msg = None
-                    if ACTIVE_CHANNEL//8 != BANK_SELECTED :
-                        if channels.isChannelSelected(j+(8*BANK_SELECTED)) and not channels.isChannelMuted(j+(8*BANK_SELECTED)) :
-                            msg = bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x7F, 0x7F, 0x00, 0x7F])
-                        elif channels.isChannelSelected(j+(8*BANK_SELECTED)) and channels.isChannelMuted(j+(8*BANK_SELECTED)) :
-                            msg = bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x7F, 0x00, 0x00, 0x7F])
-                        elif not channels.isChannelSelected(j+(8*BANK_SELECTED)) and not channels.isChannelMuted(j+(8*BANK_SELECTED)) :
-                            msg = bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x7F, 0x00, 0x7F, 0x7F])
-                        elif not channels.isChannelSelected(j+(8*BANK_SELECTED)) and channels.isChannelMuted(j+(8*BANK_SELECTED)) :
-                            msg = bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x7F, 0x00, 0x00, 0x7F])
-                    elif ACTIVE_CHANNEL//8 == BANK_SELECTED :
-                        if channels.isChannelSelected(j+(8*BANK_SELECTED)) and not channels.isChannelMuted(j+(8*BANK_SELECTED)) :
-                            msg = bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x7F, 0x7F, 0x00, 0x7F])
-                        elif channels.isChannelSelected(j+(8*BANK_SELECTED)) and channels.isChannelMuted(j+(8*BANK_SELECTED)) :
-                            msg = bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x7F, 0x00, 0x00, 0x7F])
-                        elif not channels.isChannelSelected(j+(8*BANK_SELECTED)) and not channels.isChannelMuted(j+(8*BANK_SELECTED)) :
-                            msg = bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x7F, 0x00, 0x7F, 0x7F])
-                        elif not channels.isChannelSelected(j+(8*BANK_SELECTED)) and channels.isChannelMuted(j+(8*BANK_SELECTED)) :
-                            msg = bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x7F, 0x00, 0x00, 0x7F])
-                    
-                    if msg: self._send_cached(cache_key, msg)
-                else :
-                    self._send_cached(f"sel_chan_{j}", bytes([0x02, 0x00, 0x16, SELECT_MAP[j], 0x00, 0x00, 0x00, 0x7F]))
-
-
-    def SequencerReturn(self) :
-        if KLmk2Pr.SEQ_MODE == 1 :
-            if not transport.getLoopMode() :
-                for i in range (len(PAD_MAP)) :
-                    if channels.getGridBit(channels.channelNumber(),i+(16*KLmk2Pr.RECT_OFFSET)) == 1 :
-                        bit_velocity = channels.getCurrentStepParam( channels.channelNumber(), i+(16*KLmk2Pr.RECT_OFFSET), 1)
-                        self._send_cached(f"seq_{i}", bytes([0x02, 0x00, 0x16, PAD_MAP[i], bit_velocity//4, bit_velocity//4, 0x00, 0x7F]))
-                    else :
-                        self._send_cached(f"seq_{i}", bytes([0x02, 0x00, 0x16, PAD_MAP[i], 0x7F, 0x7F, 0x7F, 0x7F]))
-            else :
-                for i in range(0,16) :
-                    self._send_cached(f"seq_{i}", bytes([0x02, 0x00, 0x16, PAD_MAP[i], 0x7F, 0x00, 0x7F, 0x7F]))
-        else :
-            # Check Pad Mode and set color accordingly
-            if KLmk2Pr.CURRENT_PAD_MODE == KLmk2Pr.PAD_MODE_CHROMATIC:
-                r, g, b = KLmk2Pr.Hardware.Pads.COLOR_PURPLE_DIM
-            else:
-                r, g, b = KLmk2Pr.Hardware.Pads.COLOR_YELLOW_DIM
-                
-            for i in range (len(PAD_MAP)) :
-                    self._send_cached(f"seq_{i}", bytes([0x02, 0x00, 0x16, PAD_MAP[i], r, g, b, 0x7F]))
-
-
-    def ProcessPlayBlink(self, value):
-        COLOR_PLAY_ON = bytes([0x02, 0x00, 0x10, 0x6D, 0x7F]) 
-        COLOR_PLAY_OFF = bytes([0x02, 0x00, 0x10, 0x6D, 0x09])
-
-        if value == 0 :
-            self._send_cached('play_blink', COLOR_PLAY_OFF)        
-        else :
-            self._send_cached('play_blink', COLOR_PLAY_ON)
-
-        
-    def ProcessRecordBlink(self, value) :
-        if transport.isRecording() :            
-            COLOR_RECORDING_ON = bytes([0x02, 0x00, 0x10, 0x6E, 0x7F]) 
-            COLOR_RECORDING_OFF = bytes([0x02, 0x00, 0x10, 0x6E, 0x09])
-            if value == 0 :
-                self._send_cached('rec_blink', COLOR_RECORDING_OFF)
-            else :
-                self._send_cached('rec_blink', COLOR_RECORDING_ON)
-                 
-    
-    def ProcessSequencerBlink(self, value) :
-        if KLmk2Pr.SEQ_MODE == 1 :
-            if not transport.getLoopMode() :
-                global REFRESH_COUNT
-                global PASS
-                PASS = False
-                REFRESH_COUNT = 0
-                actual_step = mixer.getSongStepPos()
-                self.SequencerReturn()
-                if actual_step in range (KLmk2Pr.RECT_OFFSET*16,16+KLmk2Pr.RECT_OFFSET*16) :
-                    # This is dynamic, might need careful caching or just let it pass if it changes often
-                    # But for now, let's cache it too
-                    self._send_cached(f"seq_blink_{actual_step%16}", bytes([0x02, 0x00, 0x16, PAD_MAP[actual_step%16], 0x00, 0x00, 0x7F, 0x7F]))
-                else :
-                    self._send_cached(f"seq_blink_{actual_step%16}", bytes([0x02, 0x00, 0x16, PAD_MAP[actual_step%16], 0x7F, 0x00, 0x00, 0x7F]))
-
-    
-    def RefreshTime(self) :
-        # Triggers a Fake OnUpdateBeatIndicator for sixteen notes  
-        if KLmk2Pr.SEQ_MODE == 1 and mixer.getSongTickPos() != 0 :
-            if not transport.getLoopMode() :
-                global REFRESH_COUNT
-                global PASS
-                REFRESH_COUNT += 1
-                tempo = mixer.getCurrentTempo(1)
-                tresh = (60/tempo)/4
-                if REFRESH_COUNT/22 >= tresh and PASS == False :
-                    PASS = True
-                    actual_step = mixer.getSongStepPos()
-                    self.SequencerReturn()
-                    if actual_step % 2 != 0 :
-                        if actual_step in range (KLmk2Pr.RECT_OFFSET*16,16+KLmk2Pr.RECT_OFFSET*16) :
-                            send_to_device(bytes([0x02, 0x00, 0x16, PAD_MAP[(actual_step)%16], 0x00, 0x00, 0x7F, 0x7F]))
-                        else :
-                            send_to_device(bytes([0x02, 0x00, 0x16, PAD_MAP[(actual_step)%16], 0x7F, 0x00, 0x00, 0x7F]))
-                    else :
-                        if actual_step in range (KLmk2Pr.RECT_OFFSET*16,16+KLmk2Pr.RECT_OFFSET*16) :
-                            send_to_device(bytes([0x02, 0x00, 0x16, PAD_MAP[(actual_step+1)%16], 0x00, 0x00, 0x7F, 0x7F]))
-                        else :
-                            send_to_device(bytes([0x02, 0x00, 0x16, PAD_MAP[(actual_step+1)%16], 0x7F, 0x00, 0x00, 0x7F]))
-
-
-    def NotBlinkingLed(self) :
-    
-        # DAW CONTROL LED
-        # These are static, so we can check if they are already set.
-        # We can use a single key for all of them if they always go together, 
-        # or just cache each one.
-        
-        if self._cache.get('static_leds_sent'):
-            return
-
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x62, 0x7F]))
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x63, 0x7F]))
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x64, 0x7F]))
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x65, 0x7F]))
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x66, 0x7F]))
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x67, 0x7F]))
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x69, 0x7F]))
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x6A, 0x7F]))
-        send_to_device(bytes([0x02, 0x00, 0x10, 0x6B, 0x7F]))
+        # Other static LEDs if any...
+        # 0x69, 0x6A, 0x6B are in the original list... 
+        # If mapped to Global/Track functions, they might be needed?
+        # Hardware.DAW.Track has 0x38, 0x39 (56, 57).
+        # Hardware.DAW.Global has 74, 87, 88, 89, 81.
+        # The IDs here 0x64 to 0x6B are 100 to 107.
+        # These are definitely the Track Select Buttons.
+        # So we remove them entirely from here.
         
         # CENTER LED (Navigation?)
         # Original: 0x1A, 0x1B. 

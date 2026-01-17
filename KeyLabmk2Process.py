@@ -131,8 +131,12 @@ class KeyLabMidiProcessor:
 
         self._midi_id_dispatcher = (
             MidiEventDispatcher(by_midi_id)
-            .NewHandler(144, self.OnCommandEvent)
-            .NewHandler(176, self.OnKnobEvent)
+            .NewHandler(144, self.OnCommandEvent) # Note On Ch 1
+            .NewHandler(128, self.OnCommandEvent) # Note Off Ch 1
+            .NewHandler(145, self.OnCommandEvent) # Note On Ch 2 (DAW)
+            .NewHandler(129, self.OnCommandEvent) # Note Off Ch 2 (DAW)
+            .NewHandler(176, self.OnKnobEvent)    # CC Ch 1
+            .NewHandler(177, self.OnKnobEvent)    # CC Ch 2 (DAW)
             .NewHandler(224, self.OnSliderEvent)
             )
  
@@ -273,8 +277,20 @@ class KeyLabMidiProcessor:
 
 
     def OnKnobEvent(self, event):
-        event.handled = True
-        self._knob_dispatcher.Dispatch(event)
+        # Dispatch to Knobs first
+        if self._knob_dispatcher.Dispatch(event):
+            event.handled = True
+            return
+            
+        # If not a Knob, check if it's a Command mapped to CC (e.g. Global/Track Buttons)
+        if self._midi_command_dispatcher.Dispatch(event):
+            event.handled = True
+            return
+            
+        event.handled = True # Still mark as handled to suppress unhandled CC notes? Or False?
+        # If we mark True, we stop FL from processing it. If it was a stray CC, we probably want to suppress it.
+        # But if user mapped it manually in FL, we might block it.
+        # Safest: True to prevent "Note" side effects if that's what's happening.
         
     def OnKnobNavEvent(self, event) :
         event.handled = True
@@ -462,17 +478,34 @@ class KeyLabMidiProcessor:
     
     
     def showPlugin(self, event) :
-        channels.showEditor(channels.channelNumber())
+        # channels.showEditor shows the plugin interface. 
+        # For samplers (no plugin interface), it opens Channel Settings. 
+        # If already open/hidden behind, we might need to toggle or focus.
+        # Try checking visibility first to decide toggle behavior or force show.
+        # But simple `showEditor(idx, 1)` (Method 1=Show) usually forces it.
+        # Current logic `channels.showEditor(channels.channelNumber())` toggles? Or assumes default 0?
+        # Default behavior of showEditor(channel) is toggle.
+        # Let's try explicit show.
+        channels.showEditor(channels.channelNumber(), 1)
 
     
     def ToggleBrowserChannelRack(self, event) :
         self.FakeMIDImsg()
-        if ui.getFocused(4) != True :
-            self._show_and_focus(4)
+        # Rotation: Channel Rack -> Browser -> Mixer -> Channel Rack
+        if ui.getFocused(WidChannelRack):
+            self._show_and_focus(WidBrowser)
             self._navigation.BrowserRefresh()
-        else :
-            self._show_and_focus(1)
+        elif ui.getFocused(WidBrowser):
+            self._show_and_focus(WidMixer)
+            self._navigation.MixerToggleRefresh()
+        elif ui.getFocused(WidMixer):
+            self._show_and_focus(WidChannelRack)
             self._navigation.ChannelRackRefresh()
+        else:
+            # Default entry
+            self._show_and_focus(WidChannelRack)
+            self._navigation.ChannelRackRefresh()
+            
         self.UpdateDAWButtonFeedback()
 
     
@@ -576,6 +609,12 @@ class KeyLabMidiProcessor:
                 # Fallback if function doesn't exist (e.g. older FL version)
                 print("ui.navigateBrowserTabs not found")
                 ui.previous()
+        elif ui.getFocused(WidMixer) :
+            # Navigate Mixer Tracks
+            current_track = mixer.trackNumber()
+            if current_track > 0 :
+                mixer.setTrackNumber(current_track - 1)
+                self._navigation.HintRefresh("Mixer Track: " + str(current_track - 1))
         else :
             pattern = patterns.patternNumber()
             patterns.jumpToPattern(pattern - 1)
@@ -594,6 +633,12 @@ class KeyLabMidiProcessor:
                 # Fallback
                 print("ui.navigateBrowserTabs not found")
                 ui.next()
+        elif ui.getFocused(WidMixer) :
+             # Navigate Mixer Tracks
+            current_track = mixer.trackNumber()
+            if current_track < 125 : # Max Tracks
+                mixer.setTrackNumber(current_track + 1)
+                self._navigation.HintRefresh("Mixer Track: " + str(current_track + 1))
         else :
             pattern = patterns.patternNumber()
             patterns.jumpToPattern(pattern + 1)
@@ -743,66 +788,99 @@ class KeyLabMidiProcessor:
 
     def UpdateDAWButtonFeedback(self):
         # Helper to send feedback
-        def send_feedback(cc, is_on):
-            val = 127 if is_on else 25 # 100% vs ~20%
-            # Correct MIDI message packing: Status + (Data1 << 8) + (Data2 << 16)
-            # Assuming Channel 2 (DAW Mode) for feedback? Or Channel 1?
-            # KeyLab MKII DAW mode usually listens on Channel 2 (0x1) for feedback.
-            # midi.MIDI_CONTROLCHANGE is usually 0xB0 (Channel 1). 
-            # Let's try Channel 2 (0xB1) if standard is B0.
-            # Actually, let's use the generic 0xB0 | 0x01 (Channel 2) if we are unsure, 
-            # or just 0xB0 if it's User mode.
-            # Given this is "DAW Commands", it's likely Channel 2.
-            # But let's check if we can find the channel used elsewhere.
-            # For now, I'll use 0xB0 + (0x02 - 1) ? No.
-            # Let's stick to Channel 1 (0xB0) first as it's the safest default if not specified.
-            # If it doesn't work, we can change to Channel 2.
-            # But the CRASH is likely due to the 4-byte packing with 0 in the middle.
+        def send_feedback(cc, is_on, dim_val=0x14):
+            # is_on: True (100%), False (dim_val)
+            val = 0x7F if is_on else dim_val
             
-            # Using Channel 2 (0x1) just in case, as Arturia DAW mode is usually Ch 2.
-            channel = 1 # Channel 2 (0-indexed 1)
+            # Using Channel 2 (0xB1) for DAW Command Feedback
+            # Arturia DAW mode typically uses Channel 2.
+            channel = 1 # 0-indexed, so 1 = Channel 2
             status = midi.MIDI_CONTROLCHANGE + channel
             device.midiOutMsg(status + (cc << 8) + (val << 16))
 
-        # Track Controls
-        # Control 3: Snap (Was Overdub)
-        # Snap is a bit complex as it has modes. Let's assume "Line" or "Cell" is ON.
-        # ui.getSnapMode() returns index. 0 might be "Line" or "Main".
-        # Let's just assume if it's not "None" (3?) it's ON? 
-        # Or just toggle state if we track it.
-        # For now, let's use a simple check if we can.
-        # Actually, SnapToggle just sends FPT_Snap.
-        # Let's assume it's always "ON" (High brightness) for now as it's a toggle?
-        # Or maybe we can't easily read Snap state.
-        # Let's skip Snap feedback for a moment or set it to always ON/Dim?
-        # User said "visualise their state".
-        # Let's try to read it. ui.getSnapMode()
+        # --- Global Controls ---
         
-        # ToggleBrowserChannelRack (Global 1)
-        # 100% (127) if Channel Rack (1) focused, 20% (25) if Browser (4) focused
-        # Note: This might not be perfect if neither is focused, but requested behavior is specific.
-        if ui.getFocused(1): # Channel Rack
-            send_feedback(Hardware.DAW.Global.CONTROL_1_2, True)
-        elif ui.getFocused(4): # Browser
-            send_feedback(Hardware.DAW.Global.CONTROL_1_2, False)
+        # Global 1: ToggleBrowserChannelRack (74) -> Always 100%
+        send_feedback(Hardware.DAW.Global.CONTROL_1_2, True)
+
+        # Global 2: Pad Mode (87) -> Always 100%
+        send_feedback(Hardware.DAW.Global.CONTROL_2_2, True)
+        
+        # Global 3: Overdub (88) -> 30% Off / 100% On
+        # Using ui.isLoopRecEnabled() as proxy if isOverdub shouldn't exist?
+        # FL "Overdub" is often linked to LoopRecord or Blend.
+        # Let's try to find if there is a specific check.
+        # For now, we will use a local toggle approximation if API is missing, 
+        # but better to assume off (dim) if uncertain. 
+        # We will set it to Dim (30% approx 0x18) vs Bright (0x7F).
+        # We'll rely on a safe check or default.
+        is_overdub = False
+        try:
+             is_overdub = ui.isOverdubEnabled()
+        except AttributeError:
+             # Fallback: check transport Loop Record just in case it's what they mean? No.
+             pass
+        send_feedback(Hardware.DAW.Global.CONTROL_3_2, is_overdub, dim_val=0x18)
+
+        # Global 4: Metronome (89) -> State based (Dim/Bright not specified? User said "same for solo/mute/overdub")
+        # User said: "same for the solo and mute button. start in 30% brightness and when toggled then 100% brightness."
+        # Overdub was included in that sentence. Metronome wasn't explicitly BUT previous context used it.
+        # Let's apply 30%/100% to Metronome too for consistency.
+        send_feedback(Hardware.DAW.Global.CONTROL_4_2, transport.isMetronomeEnabled(), dim_val=0x18)
+
+        # Global 5: Undo (81) -> Always 100%
+        send_feedback(Hardware.DAW.Global.CONTROL_5_2, True)
+
+
+        # --- Track Controls ---
+
+        # Track 5: Redo (57) -> Always 100%
+        send_feedback(Hardware.DAW.Track.CONTROL_5_1, True)
+        
+        # Track 1-3 handled by ranges? Or specific?
+        # If Track 1 is NewPattern (8), Track 2 is FocusMixer (16), Track 3 is Snap (0)
+        # User didn't ask for these specifically in this prompt (except "DAW Commands").
+        # Detailed prompt: "control 1 Global Controls... undo and redo... overdub... solo and mute..."
+        # So I only touch what was asked.
+
+
+        # --- Solo / Mute Buttons (Tracks) ---
+        # Solo (8-15) and Mute (16-23)
+        # Check active tracks based on offset
+        
+        base_track_index = AKLmk2.MX_OFFSET * 8 + 1 # 1-based index for mixer
+        # Or Channel Rack offset? 
+        # Depends on mode. 
+        # SoloChannel/MuteChannel functions check focus.
+        # We should probably do the same.
+        
+        if ui.getFocused(WidMixer):
+             offset = AKLmk2.MX_OFFSET
+             base = offset * 8 + 1
+             for i in range(8):
+                 track_idx = base + i
+                 if track_idx <= MAX_TRACKS:
+                     is_solo = mixer.isTrackSolo(track_idx)
+                     is_mute = mixer.isTrackMuted(track_idx)
+                     
+                     # Solo Buttons (8-15) -> IDs 8+i
+                     send_feedback(8 + i, is_solo, dim_val=0x18)
+                     
+                     # Mute Buttons (16-23) -> IDs 16+i
+                     send_feedback(16 + i, is_mute, dim_val=0x18)
         else:
-            # Default state if neither? Maybe off or dim? Let's keep it dim (False)
-            send_feedback(Hardware.DAW.Global.CONTROL_1_2, False)
+             # Channel Rack
+             offset = AKLmk2.CH_OFFSET
+             base = offset * 8
+             for i in range(8):
+                 chan_idx = base + i
+                 if chan_idx < channels.channelCount():
+                     is_solo = channels.isChannelSolo(chan_idx)
+                     is_mute = channels.isChannelMuted(chan_idx)
+                     
+                     send_feedback(8 + i, is_solo, dim_val=0x18)
+                     send_feedback(16 + i, is_mute, dim_val=0x18)
 
-        # Overdub (Global 3)
-        # Always 100% brightness as requested
-        send_feedback(Hardware.DAW.Global.CONTROL_3_2, True)
-
-        # Metronome (Global 4)
-        send_feedback(Hardware.DAW.Global.CONTROL_4_2, transport.isMetronomeEnabled())
-        
-        # Snap (Track 3)
-        # We'll just light it up if Snap is not "None" (assuming 3 is None, need to verify)
-        # For now, let's just set it to Dim (20%) as default, or maybe toggle locally?
-        # Let's leave Snap as is for now or try to guess.
-        
-        # Loop (Transport)
-        # send_feedback(Hardware.Transport.LOOP, transport.getLoopMode())
 
     def ToggleOverdub(self, event):
         transport.globalTransport(midi.FPT_Overdub, 1)
