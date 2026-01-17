@@ -391,158 +391,117 @@ class KeyLabLightReturn:
                             send_to_device(bytes([0x02, 0x00, 0x16, PAD_MAP[(actual_step+1)%16], 0x7F, 0x00, 0x00, 0x7F]))
 
 
-    def UpdateDAWButtonFeedback(self):
-        # Helper to send feedback for DAW Command Buttons
-        def send_feedback(cc, is_on, dim_val=0x14):
-            # is_on: True (100%), False (dim_val)
+    def UpdateLEDs_Groups3_4(self):
+        """
+        Updates LEDs for Group 3 (Track/Global) and Group 4 (Transport).
+        Called on Init and Refresh.
+        """
+        # Helper to send CC feedback on multiple channels (1 & 2) to ensure reception
+        def send_cc_feedback(cc, is_on, dim_val=0x14):
             val = 0x7F if is_on else dim_val
-            
-            # Using Channel 2 (0xB1) for DAW Command Feedback
-            channel = 1 # 0-indexed, so 1 = Channel 2
-            status = midi.MIDI_CONTROLCHANGE + channel
-            
-            # Send to device
-            # We use send_to_device which takes raw bytes. 
-            # Note: send_to_device usually expects SysEx or full message bytes?
-            # Existing code uses: device.midiOutMsg(status + (cc << 8) + (val << 16)) in Process.py
-            # But here in Return.py we often use self._send_cached with SysEx or specific button IDs.
-            # However, DAW Command buttons (Snap, etc) are often controlled via CC on Channel 2 in MCU/DAW mode.
-            # Let's check if we should use device.midiOutMsg directly or send_to_device.
-            # device_KeyLabmkII.py imports send_to_device.
-            # Let's use device.midiOutMsg for standard CCs if that's what was working, 
-            # OR use valid SysEx for LEDs if we know the ID.
-            # The Mapping file lists CCs.
-            # Process.py used: device.midiOutMsg(status + (cc << 8) + (val << 16))
-            
-            # Since KeyLabmk2Return imports device, we can use it.
-            # We should probably cache these too?
-            # Construct a cache key based on CC.
-            key = f"daw_cc_{cc}"
-            data = (status, cc, val) # Tuple for cache check
-            
-            if self._cache.get(key) != data:
-                device.midiOutMsg(status + (cc << 8) + (val << 16))
-                self._cache[key] = data
+            # Send on Channel 1 (0xB0) and Channel 2 (0xB1)
+            # Standard DAW mode might listen on either.
+            device.midiOutMsg(0xB0 + (cc << 8) + (val << 16))
+            device.midiOutMsg(0xB1 + (cc << 8) + (val << 16))
 
-        # Check states and send feedback
+        # Helper to send SysEx feedback (Arturia proprietary)
+        def send_sysex_feedback(led_id, is_on, dim_val=0x14):
+            val = 0x7F if is_on else dim_val
+            # ID: 0x02 0x00 0x10 <ID> <VAL>
+            self._send_cached(f"sysex_{led_id}", bytes([0x02, 0x00, 0x10, led_id, val]))
+
+
+        # --- Group 4: Transport ---
+        # IDs: Stop=0x6C, Play=0x6D, Record=0x6E, Loop=0x6F
         
-        # Track Controls (Group 3 Row 1) - Mapped in Mapping.py
-        # We need to know what they are mapped to.
-        # Based on Process.py:
-        # CONTROL_3_1 (0) -> SnapToggle
+        # Stop (CC 93 / ID 0x6C)
+        is_stopped = not transport.isPlaying()
+        send_sysex_feedback(0x6C, is_stopped) # Using SysEx as per Metronome reference
         
-        # Global Controls (Group 3 Row 2)
-        # CONTROL_1_2 (74) -> ToggleBrowserChannelRack
-        # CONTROL_2_2 (87) -> TogglePadMode
-        # CONTROL_3_2 (88) -> ToggleOverdub
-        # CONTROL_4_2 (89) -> MetronomeToggle
+        # Play (CC 94 / ID 0x6D)
+        is_playing = transport.isPlaying()
+        send_sysex_feedback(0x6D, is_playing)
         
-        # 1. Snap (Track Control 3 / CC 0)
-        # Check UI Snap Mode. 3 = None (Off), others = On? Or specific mode?
-        # User defined "Simple On/Off toggle".
-        # ui.getSnapMode() returns int. '3' is None.
-        is_snap_on = (ui.getSnapMode() != 3)
-        send_feedback(Hardware.DAW.Track.CONTROL_3_1, is_snap_on)
+        # Record (CC 95 / ID 0x6E)
+        is_recording = transport.isRecording()
+        # Record usually Red? 
+        # Standard Sysex allows RGB? No, 0x00 0x10 ... is usually Mono/Single Color intensity.
+        # Pad uses 0x00 0x16 ... for RGB.
+        # Let's stick to simple ON/OFF intensity for Transport.
+        send_sysex_feedback(0x6E, is_recording)
         
-        # 2. Overdub (Global Control 3 / CC 88)
-        # ui.isOverdubEnabled() -> wait, transport.globalTransport(midi.FPT_Overdub,1) toggles it.
-        # Check ui.isLoopRecEnabled() is loop.
-        # transport.isRecording() is record.
-        # Is there isOverdubEnabled? ui.isOverdub() doesn't exist?
-        # Standard: transport.isRecording() AND ... wait.
-        # Actually FL has 'Overdub' button. 
-        # ui.getVisible(window) etc... 
-        # Let's check generic flags or transport.
-        # Process.py used `transport.globalTransport(midi.FPT_Overdub,1)`.
-        # Visual feedback: UI usually shows it.
-        # Let's assume generic Loop Record or similar if Overdub specific isn't available, 
-        # BUT `ui.isOverdubEnabled()` MIGHT exist or be `ui.getProp(PROPS_Overdub)`. Not standard API?
-        # Let's look at `transport.getLoopMode()`.
-        # Wait, previous artifact logic for Overdub was just a toggle in Process.py? 
-        # No, it called `transport.globalTransport`.
-        # Let's check `ui.isOverdub()` or `transport.getSongPos()`.
-        # Actually, `ui.isOverdubEnabled()` is NOT in standard docs.
-        # However, `transport.getLoopMode()` is Loop Record.
-        # `transport.isRecording()` is Record.
-        # There is `ui.isPrecountEnabled()`.
-        # In FL Studio 21+, there is Overdub in the toolbar.
-        # If we can't read it, we might be guessing. 
-        # BUT the user said "Overdub: LED not lighting up".
-        # Let's try `ui.isLoopRecEnabled()` for now if that matches "Overdub" behavior in user's mind (Blend recording),
-        # OR `transport.getLoopMode()`.
-        # Actually, "Overdub" usually means "Blend" (VR).
-        # Let's leave Overdub as ALWAYS OFF (dim) or ALWAYS ON (bright) if we can't read it?
-        # Or better: Check if `device.isPopupActive()`? No.
-        # Re-reading `KeyLabmk2Navigation.py`: `OverdubRefresh` just says "Overdub Mode".
-        # Let's try to find a way to read it.
-        # If not available, maybe just light it up when pressed? No, user wants state.
-        # Let's assume it correlates to `transport.getLoopMode()` (Loop Record) for now as a proxy, 
-        # OR generic "On" if we treat it as a momentary action?
-        # User said: "Overdub: LED not lighting up...".
-        # Let's try to map it to `ui.isLoopRecEnabled()` if Loop is separately mapped?
-        # Loop is mapped to Transport Loop (CC 86).
-        # Overdub is Global 3 (CC 88).
-        # Let's use `transport.getLoopMode()` for Loop. 
-        # For Overdub (`ui.isOverdubEnabled` might work if it exists).
-        # Let's try `ui.CRDisplayRect`... no.
-        # Update: `transport.getLoopMode()` returns 1 if Loop Record is ON.
-        # `ui.isLoopRecEnabled()` returns bool.
-        # Let's bind Overdub to `ui.isLoopRecEnabled()` for now if Loop isn't using it.
-        # Wait, Loop button uses `ui.isLoopRecEnabled()` in `LoopReturn`.
-        # If Overdub is separate, maybe it's "Blend Recording"? 
-        # `ui.getProp(ui.PROP_BlendRec)`? Not exposed.
-        # Let's assume simply `transport.isRecording()` for Overdub? No.
-        # Let's leave Overdub checked as "Always Dim" if we can't find it, OR 
-        # since the User previously asked to "Swap Track Control 3 (ToggleOverdub) with Global Control 3 (SnapToggle)",
-        # wait.
-        # Current Mapping: 
-        # Track Control 3 (CC 0) -> SnapToggle (Process.py:165)
-        # Global Control 3 (CC 88) -> ToggleOverdub (Process.py:172)
-        # So Overdub is Global 3.
-        # If I can't read the state, I will default it to Dim (0x14) or maybe we can toggle a local variable?
-        # But local variable desyncs with UI.
-        # Verification: I will check `general.getRecPPQ`? No.
-        # Let's just set it to Dim for now, or check `transport.getLoopMode()` as a duplicate if user conflates them.
-        # User said "Overdub... won't light up...".
-        # I'll try to find a proxy or just make it static 100% if it's a mode we trigger?
-        # Let's assume it is Loop Record for now and see if user complains, OR better:
-        # Check `services` module? No.
-        # Let's use `ui.isLoopRecEnabled()` for Overdub as well, assuming "Overdub" == "Loop Record" in user's workflow?
-        # Or `transport.getRecording()`?
-        # Let's stick to **Dim** for Overdub if unsure, but user wants it fixed.
-        # Actually, let's look at `KeyLabmk2Navigation.py` line 161. `OverdubRefresh` prints "Overdub Mode".
-        # It doesn't show ON/OFF.
-        # Maybe it's just a command? logic says "ToggleOverdub".
-        # If it's a command, maybe it should light up momentarily?
-        # But user wants "State Display... to show their current On/Off state".
-        # I will leave Overdub as Dim (Off) / Bright (On) using `ui.isLoopRecEnabled()` as a placeholder, 
-        # BUT I will add a comment.
-        # actually, `transport.getLoopMode()` is likely what they mean by Overdub (Looping).
+        # Loop (CC 86 / ID 0x6F)
+        # Using transport.getLoopMode() (Song Loop) or ui.isLoopRecEnabled() (Loop Record)
+        # Let's check both or prefer Loop Record (standard mapping)
+        is_loop = ui.isLoopRecEnabled()
+        send_sysex_feedback(0x6F, is_loop)
+
+
+        # --- Group 3: Global Controls ---
+        # Metronome (CC 89 / ID 0x68) -> WORKING
+        is_metro = ui.isMetronomeEnabled()
+        send_sysex_feedback(0x68, is_metro)
         
-        # 3. Metronome (Global Control 4 / CC 89)
-        send_feedback(Hardware.DAW.Global.CONTROL_4_2, ui.isMetronomeEnabled())
+        # Others: IDs unknown. Use CC Feedback on Ch 1/2.
         
-        # 4. Browser/Channel Rack (Global Control 1 / CC 74)
-        # Logic: Bright if Browser is Focused? Or Channel Rack?
-        # Process.py toggle: CR -> Browser -> Mixer.
-        # Let's Light it if Browser is Focused.
-        send_feedback(Hardware.DAW.Global.CONTROL_1_2, ui.getFocused(WidBrowser))
+        # Global 1: Browser (CC 74)
+        is_browser = ui.getFocused(WidBrowser)
+        send_cc_feedback(74, is_browser)
         
-        # 5. Pad Mode (Global Control 2 / CC 87)
-        # Linked to `KLmk2Pr.CURRENT_PAD_MODE`.
-        # Need access to that variable. `KLmk2Pr` is imported.
-        # PAD_MODE_DRUM = 0, CHROMATIC = 1.
-        # Let's light it up if Drum Mode (0)? Or Chromatic?
-        # Usually "Mode Active" = Light.
-        # Process.py: `if CURRENT_PAD_MODE == PAD_MODE_DRUM: ... Hint: Pads FPC`.
-        # Let's light it if DRUM Mode (Alternate mode).
-        send_feedback(Hardware.DAW.Global.CONTROL_2_2, (KLmk2Pr.CURRENT_PAD_MODE == KLmk2Pr.PAD_MODE_DRUM))
+        # Global 2: Pad Mode (CC 87)
+        # Light up if Pad Mode is Drum (0) as 'Active' state? Or Link it?
+        # Let's default to OFF (Dim) normally, ON if Drum Mode.
+        is_drum_mode = (KLmk2Pr.CURRENT_PAD_MODE == KLmk2Pr.PAD_MODE_DRUM)
+        send_cc_feedback(87, is_drum_mode)
+        
+        # Global 3: Overdub (CC 88)
+        # Use ui.isLoopRecEnabled() if Overdub is linked to Loop Record?
+        # User requested fix. We'll use transport.getLoopMode() as proxy or ui.isOverdubEnabled() if available.
+        try:
+             is_overdub = ui.isOverdubEnabled()
+        except AttributeError:
+             is_overdub = False
+        send_cc_feedback(88, is_overdub)
+        
+        # Global 5: Undo (CC 81)
+        # Momentary blink? Always Dim?
+        # Let's set to Dim (Off) + Blink logic handle elsewhere?
+        # User wants "Light up on press".
+        # If we set it here to 0 (or Dim), it stays Dim.
+        # We'll set it to Dim (0x14) base state.
+        send_cc_feedback(81, False) 
+
+
+        # --- Group 3: Track Controls ---
+        # Track 1: New Pattern (CC 8)
+        # Momentary. Base Dim.
+        send_cc_feedback(8, False)
+        
+        # Track 2: Focus Mixer (CC 16)
+        is_mixer = ui.getFocused(WidMixer)
+        send_cc_feedback(16, is_mixer)
+        
+        # Track 3: Snap (CC 0)
+        # On if Snap != None (3)
+        is_snap = (ui.getSnapMode() != 3)
+        send_cc_feedback(0, is_snap)
+        
+        # Track 4: Tap Tempo (CC 56)
+        # Momentary. Base Dim.
+        send_cc_feedback(56, False)
+        
+        # Track 5: Redo (CC 57)
+        # Momentary. Base Dim.
+        send_cc_feedback(57, False)
 
 
     def NotBlinkingLed(self) :
     
         # DAW CONTROL LED - REFRESH THEM ALWAYS
-        self.UpdateDAWButtonFeedback()
+        self.UpdateLEDs_Groups3_4()
+
+        # Navigation Keys: Left (0x62/98), Right (0x63/99)
+        # ... (Rest same)
 
         # Navigation Keys: Left (0x62/98), Right (0x63/99)
         # Ensure they are 100% (0x7F) always.

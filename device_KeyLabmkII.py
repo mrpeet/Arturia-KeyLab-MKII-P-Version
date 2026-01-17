@@ -98,6 +98,7 @@ def OnInit():
     _mk2.paged_display().SetActivePage('main')
     print("### Messages successfully sent to KEYLAB mkII ###")
     _mk2.LightReturn().init()
+    _mk2.LightReturn().UpdateLEDs_Groups3_4()
     
 
 def init() :
@@ -133,6 +134,7 @@ def OnRefresh(flags) :
     _mk2.LightReturn().SequencerReturn()     
     _mk2.LightReturn().PlayReturn()
     _mk2.LightReturn().RecordReturn()
+    _mk2.LightReturn().UpdateLEDs_Groups3_4()
 
     
 

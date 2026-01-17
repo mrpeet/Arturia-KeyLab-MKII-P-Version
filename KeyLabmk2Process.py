@@ -246,7 +246,7 @@ class KeyLabMidiProcessor:
         
         # Initialize Dawson Button Feedback
         try:
-            self._mk2.LightReturn().UpdateDAWButtonFeedback()
+            self._mk2.LightReturn().UpdateLEDs_Groups3_4()
         except Exception as e:
             print("Error initializing DAW feedback:", e)
 
@@ -381,7 +381,7 @@ class KeyLabMidiProcessor:
                 # Update Pad Colors
                 self.UpdatePadColors(CURRENT_PAD_MODE)
                 
-        self._mk2.LightReturn().UpdateDAWButtonFeedback()
+        self._mk2.LightReturn().UpdateLEDs_Groups3_4()
 
 
 
@@ -477,7 +477,7 @@ class KeyLabMidiProcessor:
                     self._navigation.PressRefresh()
                 if not ui.isInPopupMenu() :
                     self._navigation.PressRefresh()
-        self._mk2.LightReturn().UpdateDAWButtonFeedback()
+        self._mk2.LightReturn().UpdateLEDs_Groups3_4()
             
     
     
@@ -513,7 +513,7 @@ class KeyLabMidiProcessor:
             self._show_and_focus(WidChannelRack)
             self._navigation.ChannelRackRefresh()
             
-        self._mk2.LightReturn().UpdateDAWButtonFeedback()
+        self._mk2.LightReturn().UpdateLEDs_Groups3_4()
 
     
     def ToggleMixerChannelRack(self, event) :
@@ -882,7 +882,7 @@ class KeyLabMidiProcessor:
     def ToggleOverdub(self, event):
         transport.globalTransport(midi.FPT_Overdub, 1)
         self._navigation.HintRefresh("", title="Overdub")
-        self._mk2.LightReturn().UpdateDAWButtonFeedback()
+        self._mk2.LightReturn().UpdateLEDs_Groups3_4()
 
     def Redo(self, event):
         general.undoDown()
@@ -898,12 +898,12 @@ class KeyLabMidiProcessor:
             ui.snapMode(0) # Set to Off
             self._navigation.HintRefresh("Off", title="Snap")
         
-        self._mk2.LightReturn().UpdateDAWButtonFeedback()
+        self._mk2.LightReturn().UpdateLEDs_Groups3_4()
 
     def MetronomeToggle(self, event):
         transport.globalTransport(midi.FPT_Metronome, 1)
         self._navigation.MetronomeRefresh()
-        self._mk2.LightReturn().UpdateDAWButtonFeedback()
+        self._mk2.LightReturn().UpdateLEDs_Groups3_4()
 
     def UndoOrCut(self, event):
         if self._is_pressed(event):
