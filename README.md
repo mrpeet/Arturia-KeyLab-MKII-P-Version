@@ -98,5 +98,9 @@ Vor jeder Code-Änderung in diesem Workspace die folgenden Referenzen konsultier
 
 1. **`FL_Studio_API_Reference.md`** — Jeden FL-API-Call verifizieren
 2. **`hardware_map.md`** — Alle MIDI-Annahmen verifizieren
-3. **`architecture.md`** — Modulstruktur und bekannte Probleme verstehen
-4. **`IMPLEMENTATION_MAP.md`** — Gewünschte Funktionszuordnung prüfen
+3. **`IMPLEMENTATION_MAP.md`** — Gewünschte Funktionszuordnung prüfen
+4. **`keylab_state.py`** — Zentraler State (einzige Quelle für Modes, Banking, Jitter)
+5. **`keylab_config.py`** — Hardware-Konstanten (keine MIDI-Werte hardcoden)
+6. **`BRAINSTORM.md`** — Feature-Kontext und Design-Entscheidungen
+
+**Performance:** Das Script läuft in FL Studios Echtzeit-MIDI-Pipeline. Keine Allocations in Event-Handlern, kein Blocking, SysEx-Throttling beachten.
