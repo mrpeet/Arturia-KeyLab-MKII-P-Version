@@ -56,3 +56,8 @@ class KeyLabState:
         self.fader_pickup_active = [False] * Fader.COUNT
         # Last known FL Studio volume per fader slot (0.0–1.0)
         self.fader_last_fl_value = [0.0] * Fader.COUNT
+
+        # --- Plugin mode ---
+        self.plugin_mode = False       # When True, encoders 1-8 control plugin params
+        self.last_plugin_name = ""     # Cache: last detected plugin name
+        self.plugin_encoder_values = [0.0] * 8  # Current values for relative encoders

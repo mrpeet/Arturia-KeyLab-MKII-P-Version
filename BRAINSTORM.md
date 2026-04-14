@@ -159,33 +159,91 @@ Es gibt **drei unabhängige Ansätze** zur Plugin-Steuerung über Hardware. Sie 
 ### Ansatz A: Free Mode (Priorität: HOCH)
 Der universellste Ansatz. Script setzt `event.handled = False`, FL Studio empfängt rohe MIDI-Daten.
 User nutzt FL Studios eingebautes **"Link to controller"** (Rechtsklick → Link to controller) um beliebige Parameter an beliebige Hardware-Controls zu binden.
-* *API-Check �:* Kein spezieller Code nötig — nur `event.handled = False` setzen.
+* *API-Check 🟢:* Kein spezieller Code nötig — nur `event.handled = False` setzen.
 * **Pro:** Funktioniert mit jedem Plugin, keine Mapping-Tabelle, keine Pflege.
 * **Contra:** Mappings sind pro Projekt, nicht pro Plugin. Muss jedes Mal neu gemacht werden.
 
 ### Ansatz B: Plugin Database via FL API (Priorität: MITTEL)
-Script erkennt automatisch das fokussierte Plugin (`ui.getFocusedPluginName()`) und steuert Parameter direkt über `plugins.setParamValue()`. Erfordert pro Plugin eine **Mapping-Tabelle** (welcher Encoder/Fader → welcher Parameter-Index).
+Script erkennt automatisch das fokussierte Plugin (`ui.getFocusedPluginName()`) und steuert Parameter direkt über `plugins.setParamValue()`. Erfordert pro Plugin eine **Mapping-Tabelle** (welcher Encoder → welcher Parameter-Index).
 * *API-Check 🟢:* `plugins.setParamValue(value, paramIndex, channelIndex)` + `plugins.getParamName(paramIndex, channelIndex)` — beides vorhanden, funktioniert mit FL-internen UND 3rd-Party-Plugins.
 
-**Implementierung:** Eigene Datei `plugin_database.py` mit einfacher Dictionary-Struktur:
+#### Datenquelle: Community Plugin Spreadsheet (CPS)
+
+Die Plugin-Parameter-Daten stammen aus dem **Community Plugin Spreadsheet** — einer von der FL Studio Scripting-Community gepflegten Datenbank mit **200+ Plugins** und ihren standardisierten Macro-Parametern.
+
+| Eigenschaft | Details |
+|:------------|:--------|
+| **Ersteller** | Ian Walker (rd3d2/gadgeteerONE) + Community |
+| **Lizenz** | CC0-1.0 (Public Domain) |
+| **Repository** | [rd3d2/FLKey-External-Plugins](https://github.com/rd3d2/FLKey-External-Plugins) |
+| **Python-Export** | `native_pot_parameters.py` — generiert aus dem OneDrive Spreadsheet via C#-Batch |
+| **FAQ** | [gadgeteer.home.blog/CPS-FAQ](https://gadgeteer.home.blog/2023/06/20/what-is-the-community-plugin-spreadsheet-faq/) |
+| **Forum (neue Plugins)** | [Instruments](https://forum.image-line.com/viewtopic.php?t=306692) · [Effects](https://forum.image-line.com/viewtopic.php?t=313880) |
+| **Scan-Tool** | [fl_param_checker](https://github.com/MaddyGuthridge/fl_param_checker) (MaddyGuthridge) |
+
+**Standard-Schema (8 Macro-Slots, inspiriert von Roland Zenology):**
+| Slot | Standard-Funktion | Beschreibung |
+|:-----|:-------------------|:-------------|
+| 0 | Cutoff / Filter | Hauptfilter des Plugins |
+| 1 | Resonance | Filter-Resonanz |
+| 2 | Attack | Amp- oder Filter-Hüllkurve |
+| 3 | Release | Amp- oder Filter-Hüllkurve |
+| 4 | Modulation | LFO, Mod Wheel, Mod X/Y |
+| 5 | FX1 Level | Delay, Chorus, o.ä. |
+| 6 | FX2 Level | Reverb, Phaser, o.ä. |
+| 7 | Plugin Level | Master Volume / Output |
+
+**Bereits enthaltene Plugin-Hersteller (Auszug):**
+Arturia (V-Collection), Native Instruments, TAL, Cherry Audio, Roland Cloud, Spitfire Audio, Air Music Tech, Applied Acoustics, Ample Sound, Synapse Audio, DSP, LennarDigital, Surge XT, Vital, u.v.m. — sowie alle FL Studio internen Plugins.
+
+**Implementierung:** Eigene Datei `plugin_database.py`:
 ```python
-PLUGIN_MAPS = {
-    'FLEX': {
-        'encoders': { 1: (21, 'Macro 1'), 2: (22, 'Macro 2'), ... },
-        'faders':   { 1: (10, 'Volume'), ... },
+PLUGIN_DB = {
+    "Harmless": {
+        "params": [
+            (31, "Pluck"), (79, "Harmonizer Mix"), (54, "Filter Freq"),
+            (59, "Filter Res"), (49, "Filter Decay"), (52, "Env > Filter"),
+            (71, "Phaser Mix"), (65, "Unison"),
+        ],
     },
 }
 ```
+
+#### Plugin-Spezialisierung
+
+Zusätzlich zu den 8 Standard-Macros können Plugins **erweiterte Steuerungen** definieren. Das `special`-Dict im Plugin-Eintrag aktiviert Plugin-spezifische Hardware-Bindungen:
+
+```python
+"Kontakt": {
+    "params": [(0, "P1"), (1, "P2"), ...],
+    "special": {
+        "jog_wheel": "preset_navigation",
+    },
+},
+"FPC": {
+    "params": [(256, "Pad 1 Tune"), ...],
+    "special": {
+        "pads": "drum_mapping",
+    },
+},
+```
+
+**Mögliche Spezialisierungen:**
+- **Jogwheel → Preset-Navigation** (Kontakt, Komplete Kontrol)
+- **Pads → Drum-Pad-Mapping** (FPC, Battery, Drumaxx)
+- **Fader → Slice-Navigation** (Slicex, Fruity Slicer)
+- **Encoder 9 (Master) → spezieller Parameter** (z.B. Master Volume bei Synths)
+
+Die Spezialisierung ist optional — fehlt das `special`-Dict, werden nur die 8 Standard-Macros gemappt.
+
 **User-Zugänglichkeit:**
 - Header-Kommentar mit Schritt-für-Schritt-Anleitung zum Hinzufügen neuer Plugins
 - Debug-Helper: Bei unbekanntem Plugin alle Parameter mit Index + Name in Script Output loggen
 - Struktur so einfach, dass Hinzufügen per Copy-Paste oder per AI-Prompt möglich ist
-- Für unbekannte Plugins: Fallback auf **generischen Modus** (erste 8 Parameter auf Encoder)
+- Für unbekannte Plugins: Fallback auf **Free Mode** (`event.handled = False`)
+- Eigene Plugins scannen mit `fl_param_checker`
 
-**Bereits im alten Script gemappte Plugins** (als Vorlage in `_archive/KeyLabmk2Plugin.py`):
-FLEX, FPC, FL Keys, Sytrus, GMS, Harmless, Harmor, Morphine, 3x Osc, Fruity DX10, BassDrum, Fruit Kick, MiniSynth, PoiZone, Sakura
-
-**Display-Feedback:** Beim Drehen eines Encoders/Faders wird der **Parametername + Wert** auf dem LCD angezeigt → User muss nichts auswendig lernen.
+**Display-Feedback:** Beim Drehen eines Encoders wird der **Parametername + Wert** auf dem LCD angezeigt → User muss nichts auswendig lernen.
 
 ### Ansatz C: Port 10 Forwarding für V-Collection (Priorität: NIEDRIG)
 Separates Forward-Script (`device_KeyLabmkII_Forward.py`) leitet CCs vom Keys Port an FL Studios internen Port 10 weiter. Arturia V-Collection Plugins (Analog Lab, Mini V, Jup-8 etc.) haben **vorgefertigte CC-Mappings** und funktionieren sofort, wenn ihr MIDI-In-Port auf 10 steht.
@@ -230,6 +288,8 @@ Separates Forward-Script (`device_KeyLabmkII_Forward.py`) leitet CCs vom Keys Po
   - **Plugin Database** (Prio mittel) — `plugins.setParamValue()` mit curated Mappings pro Plugin, user-friendly erweiterbar über `plugin_database.py`
   - **Port 10 Forwarding** (Prio niedrig) — nur für Arturia V-Collection, optional, separates Script
 - [x] **Port 10 Forwarding:** Ist **optional** und nur für Arturia V-Collection relevant. Für FL-interne und 3rd-Party-Plugins nutzt das Script die FL API direkt (`plugins.setParamValue`), kein Forwarding nötig. Das Forward-Script (`device_KeyLabmkII_Forward.py`) ist eigenständig und hat keine Abhängigkeit zum Hauptscript.
+- [x] **Plugin Database Datenquelle:** **Community Plugin Spreadsheet (CPS)** von Ian Walker (rd3d2), Lizenz CC0-1.0. Python-Export `native_pot_parameters.py` aus [rd3d2/FLKey-External-Plugins](https://github.com/rd3d2/FLKey-External-Plugins). Nicht das UCS-Framework — wir nutzen nur die Daten, nicht den Code.
+- [x] **Plugin-Spezialisierung:** Erlaubt. Jeder Plugin-Eintrag in `plugin_database.py` kann ein optionales `special`-Dict enthalten für erweiterte Hardware-Bindungen (z.B. Jogwheel-Navigation für Kontakt). Bricht nicht den 8-Macro-Standard — ergänzt ihn nur.
 
 ---
 
