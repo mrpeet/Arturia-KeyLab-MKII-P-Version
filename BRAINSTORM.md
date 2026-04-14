@@ -35,6 +35,10 @@ Wenn der Mixer fokussiert ist, repräsentiert die Hardware exakt den Zustand in 
 * **Bank-Wechsel LED-Feedback:** Display zeigt temporär welche Bank aktiv ist (z.B. "Bank 2: Tracks 9–16").
   * *API-Check 🟢:* Reine Display-Logik mit ephemeral line (`KeyLabDisplay`).
 
+### Fader Jitter-Filter (Hardware-Kompensation)
+Alternde Fader können in Ruhepositionen minimale Wertschwankungen (±1–2 LSB) senden, die als Dauerfeuer von MIDI-Events ankommen.
+* *API-Check 🟢:* Reines Script-Feature. Pro Fader den letzten gesendeten 14-Bit-Wert tracken (`keylab_state.fader_last_sent_value`). Neuer Wert wird nur akzeptiert wenn `abs(new - old) >= FADER_JITTER_THRESHOLD` (25 ≈ 0.15% der Range). Schützt auch Soft Pickup vor falschen Trigger-Events.
+
 ### Modus 2: Free Mode (Custom Mapping)
 Ein Modus für maximale Freiheit, um die Bedienelemente pro Projekt individuell zuzuweisen.
 * *API-Check 🟢:* Script setzt `event.handled = False`. FL Studio empfängt rohe MIDI-Daten und erlaubt manuelles "Link to controller".
@@ -150,14 +154,48 @@ Die aktuelle Startup-Animation (Lauflicht) dauert zu lange und stört bei schnel
 
 ## 8. Plugin-Steuerung
 
-* **Encoder → Plugin-Parameter wenn Plugin fokussiert**
-  * *API-Check 🟡:* `plugins.setParamValue(paramIndex, value, slotIndex)` existiert. Problem: Parameter-Index ist Plugin-spezifisch. Ohne Mapping-Tabelle muss man generisch die ersten 8 Parameter nehmen. Alternative: `device.linkToLastTweaked`.
+Es gibt **drei unabhängige Ansätze** zur Plugin-Steuerung über Hardware. Sie schließen sich nicht gegenseitig aus.
 
-* **Preset-Wechsel über Links/Rechts**
-  * *API-Check 🟢:* `plugins.nextPreset(slotIndex)` / `plugins.prevPreset(slotIndex)` — direkt verfügbar.
+### Ansatz A: Free Mode (Priorität: HOCH)
+Der universellste Ansatz. Script setzt `event.handled = False`, FL Studio empfängt rohe MIDI-Daten.
+User nutzt FL Studios eingebautes **"Link to controller"** (Rechtsklick → Link to controller) um beliebige Parameter an beliebige Hardware-Controls zu binden.
+* *API-Check �:* Kein spezieller Code nötig — nur `event.handled = False` setzen.
+* **Pro:** Funktioniert mit jedem Plugin, keine Mapping-Tabelle, keine Pflege.
+* **Contra:** Mappings sind pro Projekt, nicht pro Plugin. Muss jedes Mal neu gemacht werden.
 
-* **Analog Lab / V-Collection: CCs an Port 10 weiterleiten**
-  * *API-Check 🟢:* `device.forwardMIDICC(message, port)` — direkt verfügbar. Braucht Companion-Script oder Port-10-Logik im Hauptscript.
+### Ansatz B: Plugin Database via FL API (Priorität: MITTEL)
+Script erkennt automatisch das fokussierte Plugin (`ui.getFocusedPluginName()`) und steuert Parameter direkt über `plugins.setParamValue()`. Erfordert pro Plugin eine **Mapping-Tabelle** (welcher Encoder/Fader → welcher Parameter-Index).
+* *API-Check 🟢:* `plugins.setParamValue(value, paramIndex, channelIndex)` + `plugins.getParamName(paramIndex, channelIndex)` — beides vorhanden, funktioniert mit FL-internen UND 3rd-Party-Plugins.
+
+**Implementierung:** Eigene Datei `plugin_database.py` mit einfacher Dictionary-Struktur:
+```python
+PLUGIN_MAPS = {
+    'FLEX': {
+        'encoders': { 1: (21, 'Macro 1'), 2: (22, 'Macro 2'), ... },
+        'faders':   { 1: (10, 'Volume'), ... },
+    },
+}
+```
+**User-Zugänglichkeit:**
+- Header-Kommentar mit Schritt-für-Schritt-Anleitung zum Hinzufügen neuer Plugins
+- Debug-Helper: Bei unbekanntem Plugin alle Parameter mit Index + Name in Script Output loggen
+- Struktur so einfach, dass Hinzufügen per Copy-Paste oder per AI-Prompt möglich ist
+- Für unbekannte Plugins: Fallback auf **generischen Modus** (erste 8 Parameter auf Encoder)
+
+**Bereits im alten Script gemappte Plugins** (als Vorlage in `_archive/KeyLabmk2Plugin.py`):
+FLEX, FPC, FL Keys, Sytrus, GMS, Harmless, Harmor, Morphine, 3x Osc, Fruity DX10, BassDrum, Fruit Kick, MiniSynth, PoiZone, Sakura
+
+**Display-Feedback:** Beim Drehen eines Encoders/Faders wird der **Parametername + Wert** auf dem LCD angezeigt → User muss nichts auswendig lernen.
+
+### Ansatz C: Port 10 Forwarding für V-Collection (Priorität: NIEDRIG)
+Separates Forward-Script (`device_KeyLabmkII_Forward.py`) leitet CCs vom Keys Port an FL Studios internen Port 10 weiter. Arturia V-Collection Plugins (Analog Lab, Mini V, Jup-8 etc.) haben **vorgefertigte CC-Mappings** und funktionieren sofort, wenn ihr MIDI-In-Port auf 10 steht.
+* *API-Check 🟢:* `device.forwardMIDICC(message, port)` — direkt verfügbar.
+* **Pro:** Arturia-Plugins funktionieren sofort ohne Mapping-Arbeit.
+* **Contra:** Nur für Arturia-Plugins nützlich. Jede Plugin-Instanz muss manuell MIDI-In Port 10 bekommen. Alle Plugins auf Port 10 empfangen gleichzeitig — keine automatische Trennung.
+* **Alternative:** Hardware "Analog Lab"-Modus (kein Script nötig, aber kein gleichzeitiger DAW-Zugriff).
+
+### Preset-Wechsel über Links/Rechts
+* *API-Check 🟢:* `plugins.nextPreset(slotIndex)` / `plugins.prevPreset(slotIndex)` — direkt verfügbar. Kontextabhängig: nur wenn Plugin fokussiert.
 
 ---
 
@@ -187,6 +225,11 @@ Die aktuelle Startup-Animation (Lauflicht) dauert zu lange und stört bei schnel
 - [x] **Display-SysEx:** **1:1 portieren** aus `KeyLabmk2Display.py` + `KeyLabmk2Pages.py` (Ray Juang, MIT 2020). Bewährt, keine Bugs.
 - [x] **Track-Button-Modi (Select/Solo/Mute):** **Long Press auf Track-Button** — Short Press = Select, Long Press = Solo, Double-Click = Mute. Kein extra Modifier-Button nötig.
 - [x] **Free Mode:** **Script-Toggle über Button** (z.B. Long Press auf Save/Note 80). Man bleibt im DAW-Modus der Hardware, aber Fader/Encoder werden an FL Studio durchgereicht für manuelles "Link to controller".
+- [x] **Plugin-Steuerung:** Drei getrennte Ansätze, unabhängig voneinander:
+  - **Free Mode** (Prio hoch) — universell, für jeden Parameter in jedem Plugin
+  - **Plugin Database** (Prio mittel) — `plugins.setParamValue()` mit curated Mappings pro Plugin, user-friendly erweiterbar über `plugin_database.py`
+  - **Port 10 Forwarding** (Prio niedrig) — nur für Arturia V-Collection, optional, separates Script
+- [x] **Port 10 Forwarding:** Ist **optional** und nur für Arturia V-Collection relevant. Für FL-interne und 3rd-Party-Plugins nutzt das Script die FL API direkt (`plugins.setParamValue`), kein Forwarding nötig. Das Forward-Script (`device_KeyLabmkII_Forward.py`) ist eigenständig und hat keine Abhängigkeit zum Hauptscript.
 
 ---
 

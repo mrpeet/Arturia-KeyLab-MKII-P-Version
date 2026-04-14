@@ -6,5 +6,16 @@ Before making **any** code changes or generating **any** new code in this worksp
 1. `FL_Studio_API_Reference.md` -> Your ONLY source of truth for FL Studio Python API capabilities. If a command isn't here or in the official docs, DO NOT invent it.
 2. `hardware_map.md` -> Your source of truth for incoming physical MIDI data (Ports, Note/CC/PitchBend).
 3. `IMPLEMENTATION_MAP.md` -> Your source of truth for feature requirements and what each button/fader SHOULD do. Check the status markers (⬜/🔧/✅/❌).
-4. `keylab_state.py` (once created) -> The ONLY place where global state (Mixer mode, Bank offsets) is managed.
-Skipping either cross-check is not allowed for edits or new code in this repository.
+4. `keylab_state.py` -> The ONLY place where global state (Mixer mode, Bank offsets, Jitter threshold) is managed.
+5. `keylab_config.py` -> The ONLY place where hardware constants (Note/CC/PB numbers) are defined. Never hardcode MIDI values elsewhere.
+6. `BRAINSTORM.md` -> Feature context, design decisions, and API-reality-checks. Consult before implementing new features.
+
+Skipping any cross-check is not allowed for edits or new code in this repository.
+
+## PERFORMANCE RULES:
+- This script runs inside FL Studio's real-time MIDI processing pipeline. **Responsiveness is critical.**
+- Avoid unnecessary allocations, loops, or heavy computation in MIDI event handlers (`OnMidiMsg`, `OnMidiIn`).
+- Prefer pre-computed lookup tables (dicts) over if/elif chains for event dispatch.
+- Never block or sleep in any callback — FL Studio's UI will freeze.
+- Throttle SysEx output (display updates, LED colors) to avoid flooding the MIDI bus.
+- Keep imports minimal — only import what is actually used per module.

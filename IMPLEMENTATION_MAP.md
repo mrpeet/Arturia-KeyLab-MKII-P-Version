@@ -3,8 +3,11 @@
 > **Status:** 🚧 Work in Progress — wird während der Entwicklung aktualisiert.
 >
 > Dieses Dokument verbindet die **physischen MIDI-Daten** (Quelle: `hardware_map.md`) mit den
-> **gewünschten FL Studio Funktionen** (Quelle: `CONTROLLER_OVERVIEW.md` + eigene Planung).
+> **gewünschten FL Studio Funktionen** (Quelle: eigene Planung + `BRAINSTORM.md`).
 > Es dient als verbindlicher Implementierungsplan für das neue Script.
+>
+> **Hinweis:** Das Forward-Script (`device_KeyLabmkII_Forward.py`) ist **optional** und nur für
+> Arturia V-Collection Plugins relevant. Alle anderen Features funktionieren ohne es.
 >
 > **Legende Status:** ⬜ offen · 🔧 in Arbeit · ✅ fertig · ❌ verworfen
 
@@ -150,14 +153,23 @@ Fader senden Pitch Bend auf separaten MIDI-Kanälen. Touch-Sensor sendet zusätz
 
 ## Modes & States
 
-| Modus           | Auslöser                     | Beschreibung                                |
-|:---             |:---                          |:---                                         |
-| Mixer Mode      | ToggleBrowserCR (Note 80)    | Fader/Encoder → Mixer Track Vol/Pan         |
-| Channel Mode    | ToggleBrowserCR (Note 80)    | Fader/Encoder → Channel Rack Vol/Pan        |
-| Pad FPC/Drum    | TogglePadMode (Note 87)      | Pads → FPC Standard-Layout                  |
-| Pad Chromatic   | TogglePadMode (Note 87)      | Pads → chromatisch ab C3                    |
-| Sequencer Mode  | (TBD — aktuell nicht belegt) | Pads → Step-Sequencer Grid                  |
+| Modus           | Auslöser                          | Beschreibung                                |
+|:---             |:---                               |:---                                         |
+| Mixer Mode      | Auto (Mixer fokussiert)           | Fader/Encoder → Mixer Track Vol/Pan         |
+| Channel Mode    | Auto (Channel Rack fokussiert)    | Fader/Encoder → Channel Rack Vol/Pan        |
+| Free Mode       | Long Press Save (Note 80)         | Fader/Encoder → `event.handled = False` (Link to controller) |
+| Pad FPC/Drum    | TogglePadMode (Note 87)           | Pads → FPC Standard-Layout                  |
+| Pad Chromatic   | TogglePadMode (Note 87)           | Pads → chromatisch ab C3                    |
+| Sequencer Mode  | (TBD — aktuell nicht belegt)      | Pads → Step-Sequencer Grid                  |
+
+### Track-Button-Modi
+
+| Aktion       | Auslöser                  | FL API                     |
+|:---          |:---                       |:---                        |
+| Select Track | Short Press (Track Btn)   | `mixer.setTrackNumber`     |
+| Solo Track   | Long Press (Track Btn)    | `mixer.soloTrack`          |
+| Mute Track   | Double-Click (Track Btn)  | `mixer.muteTrack`          |
 
 ---
 
-*Quellen: [`hardware_map.md`](hardware_map.md) · [`FL_Studio_API_Reference.md`](FL_Studio_API_Reference.md) · [`CONTROLLER_OVERVIEW.md`](CONTROLLER_OVERVIEW.md)*
+*Quellen: [`hardware_map.md`](hardware_map.md) · [`FL_Studio_API_Reference.md`](FL_Studio_API_Reference.md) · [`_archive/CONTROLLER_OVERVIEW.md`](_archive/CONTROLLER_OVERVIEW.md) (historisch)*

@@ -1,4 +1,4 @@
-# name= KeyLab mkII P Version
+# name= KeyLab mkII P Version (MIDIIN2 · Port 1)
 
 """
 [[

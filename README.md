@@ -10,19 +10,20 @@ Custom FL Studio user MIDI script for the **Arturia KeyLab mkII** keyboard contr
 
 Dieses Projekt basiert auf Arbeit mehrerer Entwickler:
 
-### Farès MEZDOUR — Original-Script
-- **Dateien:** siehe `_archive/` — alle Originaldateien des alten Scripts
-- Haupt-Logik für MIDI-Processing, LED-Feedback, Step Sequencer, Plugin-Steuerung und Hardware-Mapping
-
-### Ray Juang — Dispatcher & Display (MIT License, 2020)
+### Ray Juang — Hauptautor (MIT License, 2020)
+- **Basis:** [github.com/rjuang/flstudio-arturia-keylab-mk2](https://github.com/rjuang/flstudio-arturia-keylab-mk2)
 - **Portiert nach:** `keylab_dispatch.py`, `keylab_display.py`, `keylab_pages.py`
-- Event-Dispatcher-Pattern, LCD-SysEx-Ansteuerung mit Scrolling, Timed-Page-Manager
+- Architektur, Event-Dispatcher, LCD-SysEx, Scrolling, Timed-Page-Manager, Plugin-Steuerung, Encoder/Slider-Logik
 - Lizenz: MIT License — Copyright (c) 2020 Ray Juang
 
-### P Version — Anpassungen & Neustrukturierung
-- Bugfixes, Anpassungen an persönliche Workflow-Bedürfnisse
-- Bestandsaufnahme und Dokumentation des gesamten Codes
-- Modulare Neustrukturierung (in Arbeit)
+### Farès MEZDOUR — Anpassungen (Arturia)
+- **Dateien:** siehe `_archive/` — Anpassungen am Original-Script
+- Plugin-Mapping-Tabellen (FLEX, Sytrus, Harmor etc.), LED-Feedback, Step-Sequencer-Integration
+
+### P Version — Neustrukturierung
+- Modulare Neufassung mit sauberer Architektur
+- Bestandsaufnahme, Dokumentation und API-Verifikation
+- Eigene Feature-Planung und Implementierung
 
 ---
 
@@ -48,8 +49,8 @@ Dieses Projekt basiert auf Arbeit mehrerer Entwickler:
 
    | FL Studio Input | Hardware-Name | Script | Port |
    |:----------------|:--------------|:-------|:-----|
-   | `MIDIIN2 (KeyLab mkII 61)` | DAW Port | **KeyLab mkII P Version (user)** | 1 |
-   | `KeyLab mkII 61` | Keys Port | **Forward CCs Port 10 (user)** *(optional, für V-Collection)* | 0 |
+   | `MIDIIN2 (KeyLab mkII 61)` | DAW Port | **KeyLab mkII P Version (MIDIIN2 · Port 1)** | 1 |
+   | `KeyLab mkII 61` | Keys Port | **KeyLab mkII Forward (KeyLab mkII 61 · Port 0)** *(optional — nur für V-Collection)* | 0 |
 
 ---
 
@@ -59,7 +60,8 @@ Dieses Projekt basiert auf Arbeit mehrerer Entwickler:
 
 | Datei | Rolle | Status |
 |:------|:------|:-------|
-| `device_KeyLabmkII.py` | FL Callbacks / Entry Point | ✅ Skeleton |
+| `device_KeyLabmkII.py` | FL Callbacks / Entry Point (DAW Port) | ✅ Skeleton |
+| `device_KeyLabmkII_Forward.py` | V-Collection CC-Forwarding (Keys Port, **optional**) | ✅ Fertig |
 | `keylab_config.py` | Hardware-Konstanten (Note/CC/PB aus `hardware_map.md`) | ✅ Fertig |
 | `keylab_state.py` | Zentraler State (Modes, Banking, Pickup) | ✅ Fertig |
 | `keylab_dispatch.py` | Event-Dispatcher + `send_to_device` (SysEx) | ✅ Portiert |
@@ -86,7 +88,6 @@ Dieses Projekt basiert auf Arbeit mehrerer Entwickler:
 | [`FL_Studio_API_Reference.md`](FL_Studio_API_Reference.md) | FL Studio MIDI Scripting API — lokale Referenz |
 | [`IMPLEMENTATION_MAP.md`](IMPLEMENTATION_MAP.md) | Implementierungsplan: Hardware-MIDI ↔ gewünschte Funktionen (WIP) |
 | [`BRAINSTORM.md`](BRAINSTORM.md) | Feature-Ideen mit Machbarkeits-Tracking |
-| [`CONTROLLER_OVERVIEW.md`](CONTROLLER_OVERVIEW.md) | Historische Referenz (Funktionen korrekt, MIDI-Daten vom alten Mapping) |
 | [`.cursorrules`](.cursorrules) | Pflicht-Crosschecks für AI-Agents |
 
 ---

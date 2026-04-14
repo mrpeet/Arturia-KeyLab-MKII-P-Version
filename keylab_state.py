@@ -43,6 +43,14 @@ class KeyLabState:
         # --- Free mode ---
         self.free_mode = False  # When True, fader/encoder events are not handled (pass-through)
 
+        # --- Fader jitter filter ---
+        # Minimum delta (14-bit PB range 0–16383) before a fader value is accepted.
+        # Filters electrical noise from aging faders without noticeably reducing resolution.
+        # ~0.15 % of full range — enough to suppress ±1–2 LSB noise.
+        self.FADER_JITTER_THRESHOLD = 25
+        # Last 14-bit value that was actually forwarded to FL Studio, per fader.
+        self.fader_last_sent_value = [0] * Fader.COUNT
+
         # --- Soft pickup ---
         # Per-fader: True once the physical fader has crossed the software value
         self.fader_pickup_active = [False] * Fader.COUNT
