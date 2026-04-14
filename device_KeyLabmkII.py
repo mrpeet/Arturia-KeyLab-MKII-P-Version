@@ -3,165 +3,92 @@
 """
 [[
 	Surface:	KeyLab mkII
-	Developer:	Farès MEZDOUR
-	Version:	Beta 1.0
+	Original:	Farès MEZDOUR
+	Display/Dispatch: Ray Juang (MIT License, 2020)
+	P Version:	Refactored modular rewrite
 ]]
 """
 
 import ui
-import time
 import channels
 import patterns
-import midi
-import ArturiaCrossKeyboardKLmk2
+
+from keylab_display import KeyLabDisplay
+from keylab_pages import KeyLabPagedDisplay
+from keylab_dispatch import send_to_device
+from keylab_state import KeyLabState
 
 
-from KeyLabmk2Process import KeyLabMidiProcessor
-from KeyLabmk2Return import KeyLabLightReturn
-from KeyLabmk2Display import KeyLabDisplay
-from KeyLabmk2Pages import KeyLabPagedDisplay
-from KeyLabmk2Dispatch import send_to_device
-
-## CONSTANT
-
-TEMP = 0.5
-HW_Flag = {"Select" : [295, 263, 256]} 
+# ---------------------------------------------------------------------------
+#  Global instances (created in OnInit)
+# ---------------------------------------------------------------------------
+_state = None       # type: KeyLabState
+_display = None     # type: KeyLabDisplay
+_pages = None       # type: KeyLabPagedDisplay
 
 
-#-----------------------------------------------------------------------------------------
-
-# This is the master class. It will run the init lights pattern 
-# and call the others class to process MIDI events
-
-
-class MidiControllerConfig :
-
-    def __init__(self):
-        self._lightReturn = KeyLabLightReturn()
-        self._display = KeyLabDisplay()
-        self._paged_display = KeyLabPagedDisplay(self._display)
-
-
-    def LightReturn(self) :
-        return self._lightReturn
-        
-    def display(self):
-        return self._display
-
-    def paged_display(self):
-        return self._paged_display
-        
-    def Idle(self):
-        self._paged_display.Refresh()
-        
-
-        
-    def Sync(self):
-        
-        # Update display
-        
-        active_index = channels.selectedChannel()
-        channel_name = channels.getChannelName(active_index)
-        pattern_number = patterns.patternNumber()
-        pattern_name = patterns.getPatternName(pattern_number)      
-        
-        
-        self._paged_display.SetPageLines(
-            'main',
-            line1='%d - %s' % (active_index + 1, channel_name),
-            line2='%s' % pattern_name)
-
-
-
-
-
-
-#----------------------------------------------------------------------------------------
-
-# Function called for each event 
-
-
-def OnMidiMsg(event) :
-    process = _processor.ProcessEvent(event)
-    if not process:
-        print("Unknown ID: " + str(event.midiId) + " Data1: " + str(event.data1) + " Data2: " + str(event.data2))
-
-
-
-# Functions called when FL Studio is starting
-
+# ---------------------------------------------------------------------------
+#  FL Studio Callbacks
+# ---------------------------------------------------------------------------
 
 def OnInit():
-    print("### INIT KEYLAB mkII OKAY ###")
-    init()
-    _mk2.Sync()
-    _mk2.paged_display().SetPageLines('welcome', line1='KeyLab mkII', line2=ui.getProgTitle())
-    _mk2.paged_display().SetActivePage('welcome', expires = 1500)
-    _mk2.paged_display().SetActivePage('main')
-    print("### Messages successfully sent to KEYLAB mkII ###")
-    _mk2.LightReturn().init()
-    _mk2.LightReturn().UpdateLEDs_Groups3_4()
-    
+    global _state, _display, _pages
+    _state = KeyLabState()
+    _display = KeyLabDisplay()
+    _pages = KeyLabPagedDisplay(_display)
 
-def init() :
-    print("### Successfully created class objects ###")
-    global _mk2 
-    _mk2 = MidiControllerConfig()
-    global _processor
-    _processor = KeyLabMidiProcessor(_mk2)
-  
+    print("### INIT KEYLAB mkII P Version ###")
 
-# Handles the script when FL Studio closes
+    # Welcome message on LCD
+    _sync_main_display()
+    _pages.SetPageLines('welcome', line1='KeyLab mkII', line2=ui.getProgTitle())
+    _pages.SetActivePage('welcome', expires=1500)
+    _pages.SetActivePage('main')
+
+    print("### KeyLab mkII P Version ready ###")
+
 
 def OnDeInit():
-    _mk2.paged_display().SetPageLines('goodbye', line1='KeyLab mkII', line2='Disconnected')
-    _mk2.paged_display().SetActivePage('goodbye')
+    _pages.SetPageLines('goodbye', line1='KeyLab mkII', line2='Disconnected')
+    _pages.SetActivePage('goodbye')
+    # Turn off all LEDs
     send_to_device(bytes([0x02, 0x7D, 0x7D, 0x0B, 0x00]))
-    return
-
-  
-# Function called when Play/Pause button is ON
-
-def OnUpdateBeatIndicator(value):
-    _mk2.LightReturn().ProcessPlayBlink(value)
-    _mk2.LightReturn().ProcessRecordBlink(value)
-    _mk2.LightReturn().ProcessSequencerBlink(value)
- 
 
 
-# Function called at refresh, flag value changes depending on the refresh type 
+def OnMidiMsg(event):
+    # Skeleton: log all unhandled events for development
+    print("MIDI | id: %d  data1: %d  data2: %d  chan: %d  port: %d" % (
+        event.midiId, event.data1, event.data2, event.midiChan, event.port))
 
-def OnRefresh(flags) :
-    _mk2.Sync()
-    _mk2.LightReturn().SequencerReturn()     
-    _mk2.LightReturn().PlayReturn()
-    _mk2.LightReturn().RecordReturn()
-    _mk2.LightReturn().UpdateLEDs_Groups3_4()
 
-    
+def OnRefresh(flags):
+    _sync_main_display()
 
-# Function called time to time mainly to update the beat indicator
 
 def OnIdle():
-    _mk2.Idle()
-    _mk2.LightReturn().RefreshTime()
-    _mk2.LightReturn().MetronomeReturn()
-    _mk2.LightReturn().LoopReturn()
-    _mk2.LightReturn().NotBlinkingLed()
-    _mk2.LightReturn().IsChannelSolo()
-    _mk2.LightReturn().IsChannelMuted()
-    _mk2.LightReturn().IsTrackSolo()
-    _mk2.LightReturn().IsTrackMuted()
-    _mk2.LightReturn().SelectedChannel() 
-    
-    
-    
-# Function called on a memory switch
+    _pages.Refresh()
 
-def OnSysEx(event) :
+
+def OnUpdateBeatIndicator(value):
+    pass  # LED feedback will be added in Iteration 2
+
+
+def OnSysEx(event):
     print("SysEx: " + str(event.sysex))
-    if event.sysex == b'\xf0\x00 k\x7fB\x02\x00\x00\x15\x00\xf7' :
-        ui.setFocused(1)
-        OnRefresh(32)
-        
-        
+
+
+# ---------------------------------------------------------------------------
+#  Internal helpers
+# ---------------------------------------------------------------------------
+
+def _sync_main_display():
+    """Update the persistent 'main' page with current channel/pattern info."""
+    active_index = channels.selectedChannel()
+    channel_name = channels.getChannelName(active_index)
+    pattern_number = patterns.patternNumber()
+    pattern_name = patterns.getPatternName(pattern_number)
+
+    _pages.SetPageLines(
+        'main',
+        line1='%d - %s' % (active_index + 1, channel_name),
+        line2='%s' % pattern_name)

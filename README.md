@@ -11,11 +11,11 @@ Custom FL Studio user MIDI script for the **Arturia KeyLab mkII** keyboard contr
 Dieses Projekt basiert auf Arbeit mehrerer Entwickler:
 
 ### Farès MEZDOUR — Original-Script
-- **Dateien:** `device_KeyLabmkII.py`, `device_Forward CCs Port 10 KEYLAB MKII.py`, `KeyLabmk2Process.py`, `KeyLabmk2Return.py`, `KeyLabmk2Navigation.py`, `KeyLabmk2Mapping.py`, `KeyLabmk2Plugin.py`, `KeyLabmk2SeqParam.py`, `ArturiaCrossKeyboardKLmk2.py`, `ArturiaVCOL.py`
+- **Dateien:** siehe `_archive/` — alle Originaldateien des alten Scripts
 - Haupt-Logik für MIDI-Processing, LED-Feedback, Step Sequencer, Plugin-Steuerung und Hardware-Mapping
 
 ### Ray Juang — Dispatcher & Display (MIT License, 2020)
-- **Dateien:** `KeyLabmk2Dispatch.py`, `KeyLabmk2Display.py`, `KeyLabmk2Pages.py`
+- **Portiert nach:** `keylab_dispatch.py`, `keylab_display.py`, `keylab_pages.py`
 - Event-Dispatcher-Pattern, LCD-SysEx-Ansteuerung mit Scrolling, Timed-Page-Manager
 - Lizenz: MIT License — Copyright (c) 2020 Ray Juang
 
@@ -44,32 +44,38 @@ Dieses Projekt basiert auf Arbeit mehrerer Entwickler:
 
 2. FL Studio öffnen → **Options → MIDI Settings**
 
-3. Unter **Input** den KeyLab mkII DAW-Port auswählen → als Controller Type **"KeyLab mkII P Version (user)"** zuweisen
+3. Zwei MIDI-Inputs zuweisen:
 
-4. Falls der Companion-Script für V-Collection/Analog Lab genutzt wird: den Keys-Port separat zuweisen
+   | FL Studio Input | Hardware-Name | Script | Port |
+   |:----------------|:--------------|:-------|:-----|
+   | `MIDIIN2 (KeyLab mkII 61)` | DAW Port | **KeyLab mkII P Version (user)** | 1 |
+   | `KeyLab mkII 61` | Keys Port | **Forward CCs Port 10 (user)** *(optional, für V-Collection)* | 0 |
 
 ---
 
 ## Dateistruktur
 
-### Python-Scripts
+### Python-Scripts (neu — modulare Struktur)
 
-| Datei | Rolle |
-|:------|:------|
-| `device_KeyLabmkII.py` | Primäres FL MIDI Script (Entry Point) |
-| `device_Forward CCs Port 10 KEYLAB MKII.py` | Companion: CC-Forwarding an Port 10 für V-Collection |
-| `device_logger.py` | Optionales Logging-/Diagnose-Script |
-| `KeyLabmk2Process.py` | Kern-Logik: MIDI-Events → FL Studio Aktionen |
-| `KeyLabmk2Return.py` | LED- und Pad-Feedback an die Hardware |
-| `KeyLabmk2Display.py` | LCD SysEx-Builder mit Scrolling |
-| `KeyLabmk2Pages.py` | Timed-Page-Manager für das Display |
-| `KeyLabmk2Dispatch.py` | Event-Dispatcher + `send_to_device` (SysEx) |
-| `KeyLabmk2Navigation.py` | Kontext-Hints für Benutzeraktionen |
-| `KeyLabmk2Mapping.py` | Hardware-Konstanten (Note/CC/PB-Nummern) |
-| `KeyLabmk2Plugin.py` | Plugin-Parameter-Steuerung bei Fokus |
-| `KeyLabmk2SeqParam.py` | Step-Sequencer Parameter-Editing |
-| `ArturiaCrossKeyboardKLmk2.py` | Bank-Offsets für Mixer/Channel-Ansichten |
-| `ArturiaVCOL.py` | V-Collection Plugin-Namensliste |
+| Datei | Rolle | Status |
+|:------|:------|:-------|
+| `device_KeyLabmkII.py` | FL Callbacks / Entry Point | ✅ Skeleton |
+| `keylab_config.py` | Hardware-Konstanten (Note/CC/PB aus `hardware_map.md`) | ✅ Fertig |
+| `keylab_state.py` | Zentraler State (Modes, Banking, Pickup) | ✅ Fertig |
+| `keylab_dispatch.py` | Event-Dispatcher + `send_to_device` (SysEx) | ✅ Portiert |
+| `keylab_display.py` | LCD SysEx-Builder mit Scrolling | ✅ Portiert |
+| `keylab_pages.py` | Timed-Page-Manager für das Display | ✅ Portiert |
+| `keylab_transport.py` | Transport-Handler (Play/Stop/Record/Loop/RW/FF) | ⬜ Stub |
+| `keylab_mixer.py` | Mixer-Handler (Fader/Encoder/Buttons/Banks) | ⬜ Stub |
+| `keylab_navigation.py` | Jog/Arrows/Window-Switching | ⬜ Stub |
+| `keylab_daw_commands.py` | DAW Command Buttons (Snap/Undo/Metro...) | ⬜ Stub |
+| `keylab_feedback.py` | LED- und Pad-Feedback | ⬜ Stub |
+
+### Archiv (Referenz für Portierung)
+
+| Ordner | Inhalt |
+|:-------|:-------|
+| `_archive/` | Alle 14 Original-`.py`-Dateien des alten Scripts (Farès MEZDOUR + Ray Juang) |
 
 ### Dokumentation
 

@@ -1,107 +1,193 @@
 # KeyLab mkII — Brainstorm & Feature-Ideen
 
-> Sammelstelle für Implementierungsideen, die noch auf **Machbarkeit geprüft** werden müssen.
-> Nichts hier ist beschlossen — alles ist Diskussionsgrundlage.
+> Sammelstelle für Implementierungsideen mit **API-Reality-Check**.
+> Ideen werden bei Übernahme in die [`IMPLEMENTATION_MAP.md`](IMPLEMENTATION_MAP.md) verschoben
+> und dort mit konkreten MIDI-Daten + API-Calls versehen.
 >
-> **Legende:**
-> - 💡 Idee — noch nicht geprüft
-> - 🔍 In Prüfung — Machbarkeit wird untersucht
-> - ✅ Übernommen → nach `IMPLEMENTATION_MAP.md` verschoben
-> - ❌ Verworfen — mit Begründung
+> **Legende (API-Reality-Check):**
+> * � **Möglich** — mit der Standard FL Studio API umsetzbar
+> * � **Workaround nötig** — machbar, erfordert aber clevere Logik oder Umwege
+> * 🔴 **Unmöglich** — harte Limitierung durch FL Studio
+> * ⬜ **Offen** — noch nicht bewertet
+> * ✅ **Erledigt** — in die `IMPLEMENTATION_MAP.md` übernommen
 
 ---
 
-## Transport & Playback
+## 1. Mixer & Fader Sektion (Der "Triple-Threat" Mixer)
 
-| # | Idee | Status | Notizen |
-|:--|:-----|:-------|:--------|
-| T1 | Rewind/FF: Short Press = Bar-Navigation, Long Press = kontinuierliches Spulen | 💡 | War im alten Script so; Long-Press-Erkennung nötig |
-| T2 | Tap Tempo über mehrfaches Drücken eines DAW-Buttons | 💡 | `FPT_TapTempo` via `globalTransport` |
-| T3 | Song-Position auf Display anzeigen während Transport | 💡 | Braucht `OnIdle` + Display-Logik |
+**Idee:** Die rechte Fader- und Encoder-Sektion soll nicht statisch sein, sondern über die Hardware-Tasten zwischen verschiedenen Modi umgeschaltet werden können.
 
----
+### Modus 1: Intelligenter FL Mixer Fokus
+Wenn der Mixer fokussiert ist, repräsentiert die Hardware exakt den Zustand in FL Studio.
 
-## Mixer & Fader
+* **Master-Fader (Fader 9):** Bleibt immer auf dem FL-Master-Kanal gelockt.
+  * *API-Check 🟢:* Das interne KeyLab-Signal (0–16383) muss auf maximal 0.8 im FL Studio Mixer skaliert werden, damit 100% am Hardware-Fader exakt 0 dB in der Software entsprechen (`mixer.setTrackVolume`).
+* **Dynamisches Banking (Fader 1–8):** Fader verschieben sich je nach in FL angewähltem Track (z.B. Track 12 angewählt → Fader steuern Track 12–19).
+  * *API-Check 🟢:* Standard-Logik über Offset-Berechnung. `mixer.trackNumber()` für Selektion, `mixer.setTrackVolume(index + offset, value)` für Zugriff.
+* **Soft Pickup:** Fader-Wert wird erst übernommen, wenn der physische Fader die Software-Position erreicht/kreuzt.
+  * *API-Check 🟢:* Reines Script-Feature. Pro Fader den letzten FL-Wert (`mixer.getTrackVolume`) mit dem eingehenden PitchBend-Wert vergleichen. State-Tracking in `keylab_state.py`.
+* **Touch-Sensor → Display:** Bei Berührung eines Faders (Note On 104–112) den Tracknamen auf dem Display anzeigen.
+  * *API-Check 🟢:* `mixer.getTrackName(index + offset)` + Display-SysEx.
+* **RGB Track-Colors:** Die Track-Buttons übernehmen die Farbe des Mixertracks aus FL Studio.
+  * *API-Check 🟡:* `mixer.getTrackColor(index)` liefert den Farbwert. Da das KeyLab SysEx für Farben braucht, muss zwingend ein **Throttling** in den Code, um das MIDI-Signal bei schnellem Scrollen nicht zu überlasten.
+* **Visuelle Orientierung:** Alle Track-Buttons leuchten standardmäßig auf 30 %. Der aktuell fokussierte Track leuchtet auf 100 %.
+  * *API-Check 🟢:* Einfache IF/ELSE Logik im SysEx-Farb-Befehl.
+* **Bank-Wechsel LED-Feedback:** Display zeigt temporär welche Bank aktiv ist (z.B. "Bank 2: Tracks 9–16").
+  * *API-Check 🟢:* Reine Display-Logik mit ephemeral line (`KeyLabDisplay`).
 
-| # | Idee | Status | Notizen |
-|:--|:-----|:-------|:--------|
-| M1 | Soft Pickup für Fader (Wert erst übernehmen wenn Fader physische Position erreicht) | 💡 | Verhindert Sprünge; braucht State-Tracking pro Fader |
-| M2 | Fader Touch-Sensor: bei Berührung Trackname auf Display zeigen | 💡 | Touch = Note On 104–112 |
-| M3 | Track Buttons: Modi umschalten (Select / Solo / Mute) über Modifier-Button | 💡 | Welcher Button als Modifier? |
-| M4 | Bank-Wechsel: LED-Feedback welche Bank aktiv ist | 💡 | SysEx an Pads oder Display nötig |
+### Modus 2: Free Mode (Custom Mapping)
+Ein Modus für maximale Freiheit, um die Bedienelemente pro Projekt individuell zuzuweisen.
+* *API-Check 🟢:* Script setzt `event.handled = False`. FL Studio empfängt rohe MIDI-Daten und erlaubt manuelles "Link to controller".
 
----
+### Modus 3: Macro / Plugin Mode
+Ein Modus zur direkten Steuerung von Plugin-Parametern (besonders für FL-interne und Arturia-Plugins).
+* *API-Check 🟡:* `plugins.setParamValue(paramIndex, value, slotIndex)` existiert. Erfordert jedoch Mapping-Tabellen pro Plugin. Alternative: `device.linkToLastTweaked` für dynamisches Mapping.
 
-## Pads
-
-| # | Idee | Status | Notizen |
-|:--|:-----|:-------|:--------|
-| P1 | Pad-Farben per SysEx an aktiven Channel/Pattern anpassen | 💡 | SysEx-Protokoll aus altem Script übernehmen |
-| P2 | Step Sequencer auf Pads: aktive Steps leuchten | 💡 | `channels.getGridBit` + SysEx-Feedback |
-| P3 | Velocity-Kurve umschalten (Full/Soft/Hard) über Long Press | 💡 | Nur interner State; kein FL-API nötig |
-| P4 | Pad-Aftertouch für Expression-Mapping (z.B. Filter Cutoff) | 💡 | Hardware sendet Poly Aftertouch; FL-Routing prüfen |
-
----
-
-## Display (LCD)
-
-| # | Idee | Status | Notizen |
-|:--|:-----|:-------|:--------|
-| D1 | Zweizeilig: Zeile 1 = Kontext (Mixer/Channel/Plugin), Zeile 2 = Wert/Name | 💡 | Display-SysEx aus altem Script vorhanden |
-| D2 | Temporäre Hinweise (z.B. "Bank 2" für 2 Sekunden) mit Auto-Rückkehr | 💡 | Timer-Logik aus `KeyLabmk2Pages.py` |
-| D3 | Pattern-Name + Nummer dauerhaft auf Display | 💡 | `patterns.getPatternName` |
-| D4 | Bei Plugin-Fokus: Plugin-Name + Parameter auf Display | 💡 | `ui.getFocusedPluginName` + `plugins.getParamName` |
+### Track Buttons: Modi (Select / Solo / Mute)
+Umschalten der Track-Button-Funktion über Modifier-Button.
+* *API-Check �:* `mixer.setTrackNumber` (Select), `mixer.soloTrack` (Solo), `mixer.muteTrack` (Mute) — alle vorhanden. Modifier-Logik ist reines Script-Feature.
+* **Offene Frage:** Welcher Hardware-Button dient als Modifier? Kandidaten: Part 1/Part 2, oder ein DAW-Command-Button.
 
 ---
 
-## Navigation & UI
+## 2. Transport & Playback
 
-| # | Idee | Status | Notizen |
-|:--|:-----|:-------|:--------|
-| N1 | Jog Wheel kontextabhängig: Browser → Scroll, Mixer → Track Select, Channel → Channel Select | 💡 | Braucht Window-Focus-Erkennung |
-| N2 | Doppelklick auf Jog = "Enter" / Bestätigen | 💡 | `device.isDoubleClick` vorhanden |
-| N3 | Links/Rechts-Pfeile: im Browser → Tab wechseln, sonst → Pattern wechseln | 💡 | War im alten Script kontextabhängig |
+* **Rewind/FF: Short Press vs. Long Press**
+  Short Press = Bar-Navigation, Long Press = kontinuierliches Spulen.
+  * *API-Check 🟢:* `transport.rewind` / `transport.fastForward` für Spulen. Bar-Navigation via `transport.markerJumpJog`. Long-Press-Erkennung ist reines Script-Feature (Timer zwischen Note On / Note Off).
 
----
+* **Tap Tempo**
+  Tap Tempo über den "Read"-Button (Note 74) in der DAW-Command-Reihe.
+  * *API-Check 🟢:* `transport.globalTransport(midi.FPT_TapTempo, value)` — direkt vorhanden.
 
-## Plugin-Steuerung
-
-| # | Idee | Status | Notizen |
-|:--|:-----|:-------|:--------|
-| PL1 | Encoder → Plugin-Parameter wenn Plugin-Fenster fokussiert | 💡 | `plugins.setParamValue`; Parameter-Mapping pro Plugin? |
-| PL2 | Preset-Wechsel über Links/Rechts wenn Plugin fokussiert | 💡 | `plugins.nextPreset` / `plugins.prevPreset` |
-| PL3 | Analog Lab / V-Collection: CCs an Port 10 weiterleiten | 💡 | `device.forwardMIDICC`; Companion-Script nötig |
+* **Song-Position auf Display**
+  Während Playback die aktuelle Position (Bar:Beat) auf dem Display anzeigen.
+  * *API-Check �:* `transport.getSongPosHint()` liefert formatierten String. Anzeige via `OnIdle` + Display-Update.
 
 ---
 
-## LED Feedback
+## 3. Navigation Sektion (Jogwheel & Pfeile)
 
-| # | Idee | Status | Notizen |
-|:--|:-----|:-------|:--------|
-| L1 | Transport-LEDs: Play/Record/Loop Status widerspiegeln | 💡 | `transport.isPlaying` / `isRecording` / `getLoopMode` |
-| L2 | Beat-Indikator: LED blinkt im Takt | 💡 | `OnUpdateBeatIndicator` Callback |
-| L3 | Metronom-LED: leuchtet wenn aktiv | 💡 | `general.getUseMetronome` |
+* **Kontextabhängiges Jogwheel**
+  Browser → Scroll, Mixer → Track Select, Channel Rack → Channel Select, Plugin → Parameter-Scroll.
+  * *API-Check 🟢:* `ui.getFocused(widMixer)` etc. für Kontext-Erkennung. `ui.jog(value)` für Browser, `mixer.setTrackNumber` für Mixer, `channels.selectOneChannel` für Channel Rack.
 
----
+* **Doppelklick auf Jog = Enter/Bestätigen**
+  * *API-Check 🟢:* `device.isDoubleClick` existiert. Bei Doppelklick → `ui.enter()`.
 
-## Architektur & Code-Qualität
+* **Links/Rechts kontextabhängig**
+  Browser → Tab wechseln, Plugin → Preset wechseln, sonst → Pattern wechseln.
+  * *API-Check �:* `ui.navigateBrowserTabs(direction)` für Browser. `plugins.nextPreset` / `plugins.prevPreset` für Plugins. `patterns.jumpToPattern` für Patterns.
 
-| # | Idee | Status | Notizen |
-|:--|:-----|:-------|:--------|
-| A1 | Klare Modul-Trennung: Dispatch → Process → Return (kein zirkulärer Import) | 💡 | Altes Script hat problematische Kopplungen (siehe `architecture.md`) |
-| A2 | State als zentrale Klasse statt Module-Level Globals | 💡 | Testbarkeit und Übersichtlichkeit |
-| A3 | Event-Dispatcher Pattern mit registrierbaren Handlern | 💡 | Statt monolithischer if/elif Ketten |
-| A4 | Logging-Modul für Debug-Ausgaben (an/aus schaltbar) | 💡 | `device_logger.py` als Basis |
-
----
-
-## Offene Fragen
-
-- [ ] Soll das Companion-Script (Port 10 Forwarding) im neuen Script integriert oder separat bleiben?
-- [ ] Welche Funktionen haben Priorität für die erste lauffähige Version (MVP)?
-- [ ] Soll die Channel-Rack-Steuerung (Fader/Encoder → Channel Vol/Pan) von Anfang an dabei sein oder erst nach Mixer?
-- [ ] Display-SysEx: Protokoll aus altem Script 1:1 übernehmen oder neu aufsetzen?
+### Edison Scrubbing & Editing
+Wenn Edison fokussiert ist, soll das Jogwheel zum Scrobbeln durch die Audiodatei genutzt werden.
+* *API-Check 🔴/🟡:* Echtes Scrubbing (Playhead-Position auslesen) ist per API **unmöglich**.
+* *Workaround:* `ui.left()` / `ui.right()` für Navigation. Stark eingeschränkte Funktionalität.
 
 ---
 
-*Ideen werden bei Übernahme in die [`IMPLEMENTATION_MAP.md`](IMPLEMENTATION_MAP.md) verschoben und dort mit konkreten MIDI-Daten + API-Calls versehen.*
+## 4. Pads
+
+* **Pad-Farben per SysEx an Channel/Pattern anpassen**
+  * *API-Check 🟢:* `channels.getChannelColor(index)` + SysEx-Protokoll aus altem Script. Farb-Konvertierung (FL RGB → KeyLab 5-Bit RGB) nötig.
+
+* **Step Sequencer auf Pads: aktive Steps leuchten**
+  * *API-Check 🟢:* `channels.getGridBit(index, step)` liefert Step-Status. SysEx-Feedback für Pad-Farben. Braucht `OnRefresh` mit `HW_Dirty_LEDs` Flag.
+
+* **Velocity-Kurve umschalten (Full/Soft/Hard)**
+  Per Long Press auf TogglePadMode (Note 87).
+  * *API-Check 🟢:* Rein internes Script-Feature. Velocity-Wert vor Weiterleiten skalieren.
+
+* **Pad Velocity Visualisierung**
+  Die Pads sollen die Anschlagstärke durch ihre Leuchtkraft widerspiegeln.
+  * *API-Check 🟢:* Feste Basishelligkeit (20–30 %) + eingehender Velocity-Wert (0–127) wird in die Helligkeits-Variable des SysEx-RGB-Befehls umgerechnet.
+
+* **Pad-Aftertouch für Expression-Mapping**
+  Poly Aftertouch der Pads für z.B. Filter Cutoff nutzen.
+  * *API-Check �:* Hardware sendet Poly Aftertouch (Kanal 10). FL empfängt via `OnKeyPressure`. Routing auf Plugin-Parameter erfordert `channels.setChannelPitch` oder manuelles CC-Mapping — kein direktes "Aftertouch → Filter" in der API.
+
+---
+
+## 5. Display (LCD)
+
+* **Zweizeiliges Kontext-Display**
+  Zeile 1 = Kontext (Mixer/Channel/Plugin), Zeile 2 = Wert/Name.
+  * *API-Check 🟢:* Display-SysEx aus `KeyLabmk2Display.py` ist bewährt, wird 1:1 portiert.
+
+* **Temporäre Hinweise mit Auto-Rückkehr**
+  Z.B. "Bank 2" für 2 Sekunden, dann zurück zum Hauptdisplay.
+  * *API-Check 🟢:* Timer-Logik aus `KeyLabmk2Pages.py` — ephemeral lines mit `expires` Parameter.
+
+* **Pattern-Name + Nummer dauerhaft**
+  * *API-Check 🟢:* `patterns.patternNumber()` + `patterns.getPatternName(index)`.
+
+* **Plugin-Fokus: Plugin-Name + Parameter**
+  * *API-Check 🟢:* `ui.getFocusedPluginName()` + `plugins.getParamName(paramIndex, slotIndex)`.
+
+---
+
+## 6. LED Feedback
+
+* **Transport-LEDs: Status widerspiegeln**
+  Play/Record/Loop LEDs zeigen aktuellen Status.
+  * *API-Check �:* `transport.isPlaying()`, `transport.isRecording()`, `transport.getLoopMode()`. LED-Steuerung via `device.midiOutMsg` oder SysEx.
+
+* **Beat-Indikator: LED blinkt im Takt**
+  * *API-Check 🟢:* `OnUpdateBeatIndicator(value)` Callback — `value` gibt Beat/Bar/Off an.
+
+* **Metronom-LED: leuchtet wenn aktiv**
+  * *API-Check 🟢:* `general.getUseMetronome()` vorhanden.
+
+---
+
+## 7. System & Feedback
+
+### Fast Boot Animation
+Die aktuelle Startup-Animation (Lauflicht) dauert zu lange und stört bei schnellen Script-Refreshes.
+* *API-Check 🟢:* Ein kurzes Aufblitzen aller relevanten LEDs in `OnInit()` reicht als visuelle Bestätigung.
+
+---
+
+## 8. Plugin-Steuerung
+
+* **Encoder → Plugin-Parameter wenn Plugin fokussiert**
+  * *API-Check 🟡:* `plugins.setParamValue(paramIndex, value, slotIndex)` existiert. Problem: Parameter-Index ist Plugin-spezifisch. Ohne Mapping-Tabelle muss man generisch die ersten 8 Parameter nehmen. Alternative: `device.linkToLastTweaked`.
+
+* **Preset-Wechsel über Links/Rechts**
+  * *API-Check 🟢:* `plugins.nextPreset(slotIndex)` / `plugins.prevPreset(slotIndex)` — direkt verfügbar.
+
+* **Analog Lab / V-Collection: CCs an Port 10 weiterleiten**
+  * *API-Check 🟢:* `device.forwardMIDICC(message, port)` — direkt verfügbar. Braucht Companion-Script oder Port-10-Logik im Hauptscript.
+
+---
+
+## 9. Architektur & Code-Qualität
+
+* **Klare Modul-Trennung** (kein zirkulärer Import)
+  * *API-Check �:* Reines Design-Pattern. Dispatch → Handler → State → Feedback.
+
+* **Zentraler State** (`keylab_state.py`) statt Module-Level Globals
+  * *API-Check 🟢:* Reine Python-Architektur. Löst Problem #3 aus `architecture.md`.
+
+* **Event-Dispatcher mit registrierbaren Handlern**
+  * *API-Check 🟢:* `MidiEventDispatcher` aus `KeyLabmk2Dispatch.py` als Basis. Erweitern mit `register()`-Pattern.
+
+* **Logging-Modul für Debug-Ausgaben** (an/aus schaltbar)
+  * *API-Check 🟢:* `device_logger.py` als Basis. Python `print()` geht in FL Script Output.
+
+---
+
+## Entschiedene Fragen
+
+- [x] **Companion-Script (Port 10):** Bleibt **separat** — zwei unabhängige Scripts für zwei Hardware-Inputs:
+  - Port 0 = `KeyLab mkII 61` → Forward-Script (V-Collection CCs)
+  - Port 1 = `MIDIIN2 (KeyLab mkII 61)` → Hauptscript (DAW-Steuerung)
+  - Beide Scripts sollten über `# name=` und `# supportedDevices=` klar dokumentieren, welcher Input/Port benötigt wird.
+- [x] **Channel-Rack-Steuerung:** **Gleichwertiger Modus**, nicht optional. Die Fader/Encoder-Sektion wechselt **automatisch** je nach fokussiertem Fenster (Mixer → Mixer-Tracks, Channel Rack → Channel-Rack-Kanäle). Banking, Jog-Navigation und Track-Button-Feedback funktionieren identisch für beide. Architektur muss von vornherein abstrakt genug für beide Backends sein.
+- [x] **Display-SysEx:** **1:1 portieren** aus `KeyLabmk2Display.py` + `KeyLabmk2Pages.py` (Ray Juang, MIT 2020). Bewährt, keine Bugs.
+- [x] **Track-Button-Modi (Select/Solo/Mute):** **Long Press auf Track-Button** — Short Press = Select, Long Press = Solo, Double-Click = Mute. Kein extra Modifier-Button nötig.
+- [x] **Free Mode:** **Script-Toggle über Button** (z.B. Long Press auf Save/Note 80). Man bleibt im DAW-Modus der Hardware, aber Fader/Encoder werden an FL Studio durchgereicht für manuelles "Link to controller".
+
+---
+
+*Alle API-Checks basieren auf [`FL_Studio_API_Reference.md`](FL_Studio_API_Reference.md). Hardware-Daten verifiziert gegen [`hardware_map.md`](hardware_map.md).*
