@@ -1,0 +1,10 @@
+# KeyLab mkII MIDI scripts — mandatory references
+
+Before making **any** code changes or generating **any** new code in this workspace:
+
+## MANDATORY REFERENCES (ALWAYS CHECK BEFORE GENERATING CODE):
+1. `FL_Studio_API_Reference.md` -> Your ONLY source of truth for FL Studio Python API capabilities. If a command isn't here or in the official docs, DO NOT invent it.
+2. `hardware_map.md` -> Your source of truth for incoming physical MIDI data (Ports, Note/CC/PitchBend).
+3. `IMPLEMENTATION_MAP.md` -> Your source of truth for feature requirements and what each button/fader SHOULD do. Check the status markers (⬜/🔧/✅/❌).
+4. `keylab_state.py` (once created) -> The ONLY place where global state (Mixer mode, Bank offsets) is managed.
+Skipping either cross-check is not allowed for edits or new code in this repository.
