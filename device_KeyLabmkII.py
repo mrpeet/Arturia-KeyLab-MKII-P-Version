@@ -12,11 +12,15 @@
 import ui
 import channels
 import patterns
-
 from keylab_display import KeyLabDisplay
 from keylab_pages import KeyLabPagedDisplay
 from keylab_dispatch import send_to_device
 from keylab_state import KeyLabState
+from keylab_transport import handle_transport
+from keylab_daw_commands import handle_daw_commands
+from keylab_navigation import handle_navigation
+from keylab_mixer import handle_mixer
+from keylab_feedback import update_transport_leds, clear_all_leds
 
 
 # ---------------------------------------------------------------------------
@@ -45,24 +49,54 @@ def OnInit():
     _pages.SetActivePage('welcome', expires=1500)
     _pages.SetActivePage('main')
 
+    # Sync transport LEDs to current FL state
+    update_transport_leds()
+
     print("### KeyLab mkII P Version ready ###")
 
 
 def OnDeInit():
     _pages.SetPageLines('goodbye', line1='KeyLab mkII', line2='Disconnected')
     _pages.SetActivePage('goodbye')
-    # Turn off all LEDs
-    send_to_device(bytes([0x02, 0x7D, 0x7D, 0x0B, 0x00]))
+    clear_all_leds()
 
 
 def OnMidiMsg(event):
-    # Skeleton: log all unhandled events for development
+    """Central dispatcher — routes MIDI events through the handler chain.
+
+    Order: Transport → DAW Commands → Navigation → Mixer → Plugin
+    First handler that returns True wins; unhandled events are logged.
+    """
+    # --- Handler chain (add new handlers here in order) ---
+    if handle_transport(event, _state, _pages):
+        event.handled = True
+        return
+
+    if handle_daw_commands(event, _state, _pages):
+        event.handled = True
+        return
+
+    if handle_navigation(event, _state, _pages):
+        event.handled = True
+        return
+
+    if handle_mixer(event, _state, _pages):
+        event.handled = True
+        return
+
+    # --- Future handlers (uncomment as implemented) ---
+    # if handle_plugin_encoder(event, _state, _pages):
+    #     return
+
+    # --- Unhandled: log for development ---
     print("MIDI | id: %d  data1: %d  data2: %d  chan: %d  port: %d" % (
         event.midiId, event.data1, event.data2, event.midiChan, event.port))
 
 
 def OnRefresh(flags):
+    """Called by FL Studio when internal state changes (play/stop/record/etc.)."""
     _sync_main_display()
+    update_transport_leds()
 
 
 def OnIdle():
@@ -70,11 +104,15 @@ def OnIdle():
 
 
 def OnUpdateBeatIndicator(value):
-    pass  # LED feedback will be added in Iteration 2
+    """Beat indicator: 0=off, 1=beat, 2=bar."""
+    update_transport_leds(beat_value=value)
 
 
 def OnSysEx(event):
-    print("SysEx: " + str(event.sysex))
+    # DEBUG: Log SysEx but don't process to avoid feedback loops
+    # Some Arturia SysEx messages can trigger device re-detection
+    print("DEBUG SysEx received: " + str(event.sysex)[:50] + "...")
+    event.handled = True  # Mark as handled to stop propagation
 
 
 # ---------------------------------------------------------------------------

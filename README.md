@@ -60,18 +60,18 @@ Dieses Projekt basiert auf Arbeit mehrerer Entwickler:
 
 | Datei | Rolle | Status |
 |:------|:------|:-------|
-| `device_KeyLabmkII.py` | FL Callbacks / Entry Point (DAW Port) | ✅ Skeleton |
+| `device_KeyLabmkII.py` | FL Callbacks / Entry Point + Dispatcher-Kette | ✅ Phase 5 |
 | `device_KeyLabmkII_Forward.py` | V-Collection CC-Forwarding (Keys Port, **optional**) | ✅ Fertig |
 | `keylab_config.py` | Hardware-Konstanten (Note/CC/PB aus `hardware_map.md`) | ✅ Fertig |
 | `keylab_state.py` | Zentraler State (Modes, Banking, Pickup) | ✅ Fertig |
 | `keylab_dispatch.py` | Event-Dispatcher + `send_to_device` (SysEx) | ✅ Portiert |
 | `keylab_display.py` | LCD SysEx-Builder mit Scrolling | ✅ Portiert |
 | `keylab_pages.py` | Timed-Page-Manager für das Display | ✅ Portiert |
-| `keylab_transport.py` | Transport-Handler (Play/Stop/Record/Loop/RW/FF) | ⬜ Stub |
+| `keylab_transport.py` | Transport-Handler (Play/Stop/Record/Loop/RW/FF) | ✅ Phase 5 |
 | `keylab_mixer.py` | Mixer-Handler (Fader/Encoder/Buttons/Banks) | ⬜ Stub |
 | `keylab_navigation.py` | Jog/Arrows/Window-Switching | ⬜ Stub |
-| `keylab_daw_commands.py` | DAW Command Buttons (Snap/Undo/Metro...) | ⬜ Stub |
-| `keylab_feedback.py` | LED- und Pad-Feedback | ⬜ Stub |
+| `keylab_daw_commands.py` | DAW Command Buttons (Snap/Undo/Metro/Redo...) | ✅ Phase 6 |
+| `keylab_feedback.py` | LED- und Pad-Feedback (Transport LEDs) | ✅ Phase 5 |
 
 ### Archiv (Referenz für Portierung)
 

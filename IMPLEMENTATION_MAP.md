@@ -17,12 +17,12 @@
 
 | Hardware-Label | Typ     | Data1 | Funktion             | FL API / Logik                                    | Status |
 |:---            |:---     |:---   |:---                  |:---                                               |:---    |
-| Rewind (<<)    | Note On | 91    | RewindORprevBar      | `transport.rewind` / `transport.markerJumpJog(-1)` | ⬜     |
-| Fast Fwd (>>)  | Note On | 92    | FastForwardORnextBar | `transport.fastForward` / `transport.markerJumpJog(1)` | ⬜ |
-| Stop           | Note On | 93    | Stop                 | `transport.stop`                                  | ⬜     |
-| Play           | Note On | 94    | Start                | `transport.start`                                 | ⬜     |
-| Record         | Note On | 95    | Record               | `transport.record`                                | ⬜     |
-| Loop           | Note On | 86    | Loop                 | `transport.setLoopMode`                           | ⬜     |
+| Rewind (<<)    | Note On | 91    | RewindORprevBar      | `transport.continuousMove(-1, SS_Start/Stop)` | ✅     |
+| Fast Fwd (>>)  | Note On | 92    | FastForwardORnextBar | `transport.continuousMove(1, SS_Start/Stop)` | ✅ |
+| Stop           | Note On | 93    | Stop                 | `transport.stop`                                  | ✅     |
+| Play           | Note On | 94    | Start                | `transport.start`                                 | ✅     |
+| Record         | Note On | 95    | Record               | `transport.record`                                | ✅     |
+| Loop           | Note On | 86    | Loop                 | `transport.globalTransport(FPT_LoopRecord)`       | ✅     |
 
 ---
 
@@ -30,11 +30,11 @@
 
 | Hardware-Label | Typ     | Data1 | Funktion        | FL API / Logik                          | Status |
 |:---            |:---     |:---   |:---             |:---                                     |:---    |
-| Record (Reihe 1) | Note On | 0  | SnapToggle      | `ui.snapOnOff`                          | ⬜     |
-| Solo           | Note On | 8     | NewPattern      | `patterns.findFirstNextEmptyPat`        | ⬜     |
-| Mute           | Note On | 16    | FocusMixer      | `ui.showWindow(widMixer)`               | ⬜     |
-| Read           | Note On | 74    | TapTempo        | `transport.globalTransport(FPT_TapTempo)` | ⬜   |
-| Write          | Note On | 75    | Redo            | `general.undoUp`                        | ⬜     |
+| Record (Reihe 1) | Note On | 0  | SnapToggle      | `ui.snapOnOff`                          | ✅     |
+| Solo           | Note On | 8     | NewPattern      | `patterns.findFirstNextEmptyPat`        | ✅     |
+| Mute           | Note On | 16    | FocusMixer      | `ui.showWindow(widMixer)`               | ✅     |
+| Read           | Note On | 74    | TapTempo        | `transport.globalTransport(FPT_TapTempo)` | ✅   |
+| Write          | Note On | 75    | Undo/Cut        | Short=`general.undoUp` Long=`ui.cut`      | ✅     |
 
 ---
 
@@ -42,11 +42,11 @@
 
 | Hardware-Label | Typ     | Data1 | Funktion            | FL API / Logik                                     | Status |
 |:---            |:---     |:---   |:---                 |:---                                                |:---    |
-| Save           | Note On | 80    | ToggleBrowserCR     | `ui.showWindow` toggle (Channel Rack / Browser / Mixer) | ⬜ |
-| In             | Note On | 87    | TogglePadMode       | Interner State-Toggle (FPC ↔ Chromatic); Long Press: Velocity | ⬜ |
-| Out            | Note On | 88    | ToggleOverdub       | `transport.globalTransport(FPT_Overdub)`           | ⬜     |
-| Metro          | Note On | 89    | MetronomeToggle     | `transport.globalTransport(FPT_Metronome)`         | ⬜     |
-| Undo           | Note On | 81    | UndoOrCut           | Short: `general.undo` / Long: `ui.cut`             | ⬜     |
+| Save           | Note On | 80    | ToggleBrowserCR     | `ui.showWindow` toggle (Browser/CR) | ✅ |
+| In             | Note On | 87    | TogglePadMode       | `state.pad_mode` toggle (FPC ↔ Chromatic) | ✅ |
+| Out            | Note On | 88    | ToggleOverdub       | `transport.globalTransport(FPT_Overdub)`           | ✅     |
+| Metro          | Note On | 89    | MetronomeToggle     | `transport.globalTransport(FPT_Metronome)`         | ✅     |
+| Undo           | Note On | 81    | Redo                | `general.undoDown`                                 | ✅     |
 
 ---
 
