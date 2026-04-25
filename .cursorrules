@@ -10,6 +10,15 @@ Before making **any** code changes or generating **any** new code in this worksp
 5. `keylab_config.py` -> The ONLY place where hardware constants (Note/CC/PB numbers) are defined. Never hardcode MIDI values elsewhere.
 6. `BRAINSTORM.md` -> Feature context, design decisions, and API-reality-checks. Consult before implementing new features.
 
+## CODEMAP REFERENCES (Architecture & Patterns — READ FOR CONTEXT):
+7. `codemaps/CODEMAP_INDEX.md` -> Start here. Overview of all codemaps for KI assistance.
+8. `codemaps/handler_chain.md` -> Understand event routing order in `OnMidiMsg()` before adding handlers.
+9. `codemaps/state.md` -> Deep dive into `KeyLabState` attributes and their semantics.
+10. `codemaps/hardware_constants.md` -> How `keylab_config.py` constants map to physical hardware.
+11. `codemaps/adding_handlers.md` -> Template and checklist for creating new handler modules.
+12. `codemaps/free_mode.md` -> Passthrough logic — critical for Slot 1-8 behavior.
+13. `codemaps/plugin_control.md` -> Plugin mode, database schema, and encoder mapping.
+
 Skipping any cross-check is not allowed for edits or new code in this repository.
 
 ## PERFORMANCE RULES:

@@ -154,6 +154,11 @@
 
 **Testbar:** Plugin öffnen → Encoder steuern die richtigen Parameter, LCD zeigt Plugin-Name.
 
+
+## Phase 10.1 Testing / Bugfixing
+encoder verhalten in allen bereichen testen und korrigieren ⬜
+fader verhalten in allen bereichen testen und korrigieren ⬜
+track buttons verhalten in allen bereichen testen und korrigieren ⬜
 ---
 
 ## Phase 11 — Pads ⬜

@@ -47,6 +47,10 @@ class KeyLabState:
         # Deactivated by another Long Press Bank Prev.
         self.free_mode = False
 
+        # Free Mode: absolute encoder values (0-127, start at 64=center)
+        # Only slots 0-7, slot 8 (master) is always absolute Pitch Bend
+        self.free_encoder_values = [64] * 8
+
         # --- Fader jitter filter ---
         # Minimum delta (14-bit PB range 0–16383) before a fader value is accepted.
         # Filters electrical noise from aging faders without noticeably reducing resolution.

@@ -19,7 +19,7 @@ from keylab_state import KeyLabState
 from keylab_transport import handle_transport
 from keylab_daw_commands import handle_daw_commands
 from keylab_navigation import handle_navigation
-from keylab_mixer import handle_mixer
+from keylab_mixer import handle_mixer, handle_free_fader, handle_free_encoder
 from keylab_plugin import handle_plugin_encoder, handle_plugin_special_jog
 from keylab_feedback import update_transport_leds, clear_all_leds
 
@@ -65,10 +65,20 @@ def OnDeInit():
 def OnMidiMsg(event):
     """Central dispatcher — routes MIDI events through the handler chain.
 
-    Order: Transport → DAW Commands → Navigation → Mixer → Plugin
+    Order: Free Encoder (modifies to absolute) → Transport → DAW Commands → Navigation → Plugin → Mixer
     First handler that returns True wins; unhandled events are logged.
     """
-    # --- Handler chain (add new handlers here in order) ---
+    # --- Free Mode: Jitter-filtered fader passthrough (must be first) ---
+    if handle_free_fader(event, _state):
+        event.handled = False  # Pass filtered Pitch Bend to FL Studio
+        return
+
+    # --- Free Mode: Convert relative encoders to absolute ---
+    if handle_free_encoder(event, _state):
+        event.handled = False  # Pass modified absolute event to FL Studio
+        return
+
+    # --- Handler chain ---
     if handle_transport(event, _state, _pages):
         event.handled = True
         return

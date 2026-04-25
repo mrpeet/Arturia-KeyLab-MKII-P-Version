@@ -116,6 +116,7 @@ class Encoder:
     INCREMENT_MAX = 63
     DECREMENT_MIN = 64
     DECREMENT_MAX = 127
+    DECREMENT_BASE = 64
     # Legacy constants for simple checks
     INCREMENT = 1
     DECREMENT = 65

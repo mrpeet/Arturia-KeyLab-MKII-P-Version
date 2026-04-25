@@ -50,6 +50,92 @@ _LONG_PRESS_THRESHOLD = 1.0  # seconds
 
 
 # ---------------------------------------------------------------------------
+#  Free Mode: Jitter-Filtered Pitch Bend Passthrough for Faders
+# ---------------------------------------------------------------------------
+
+def handle_free_fader(event, state):
+    """Jitter-filtered Pitch Bend passthrough for Free Mode faders.
+
+    Returns True if event was filtered and should be passed to FL,
+    False if not a Free Mode fader event.
+    """
+    if not state.free_mode:
+        return False
+
+    if event.midiId != PITCH_BEND_STATUS or event.midiChan not in Fader.ALL_CHANNELS:
+        return False
+
+    index = event.midiChan
+    if index >= Fader.MASTER_CHANNEL:  # Master fader - let normal mixer handle it
+        return False
+
+    raw = _pb_to_raw(event.data1, event.data2)
+
+    # Jitter filter - suppress noise from aging faders
+    if abs(raw - state.fader_last_sent_value[index]) < state.FADER_JITTER_THRESHOLD:
+        return False  # Swallow the event (jitter)
+
+    state.fader_last_sent_value[index] = raw
+    return True  # Pass filtered event to FL Studio
+
+
+# ---------------------------------------------------------------------------
+#  Free Mode: Virtual Absolute Encoders
+# ---------------------------------------------------------------------------
+
+def handle_free_encoder(event, state):
+    """Convert relative encoder to absolute CC in Free Mode.
+
+    Modifies event.data2 to the new absolute value (0-127).
+    Returns True if event was modified (should be passed to FL),
+    False if not a Free Mode encoder event.
+    """
+    if not state.free_mode:
+        return False
+
+    if event.midiId != CC_STATUS or event.midiChan != 0:
+        return False
+
+    if event.data1 not in Encoder.ALL_CCS:
+        return False
+
+    index = event.data1 - Encoder.FIRST
+    if index >= 8:  # Master encoder (slot 9) - passthrough unchanged
+        return False
+
+    # Relative to absolute conversion with acceleration
+    # Speed detection: 1-2=slow, 3-10=medium, 11-20=fast, 21+=very fast
+    if event.data2 <= Encoder.INCREMENT_MAX:
+        # Right: determine step size by rotation speed
+        speed = event.data2
+        if speed <= 2:
+            step = 1
+        elif speed <= 10:
+            step = 3
+        elif speed <= 20:
+            step = 5
+        else:
+            step = 10
+        state.free_encoder_values[index] = min(127, state.free_encoder_values[index] + step)
+    else:
+        # Left: determine step size by rotation speed (65=1, 127=63)
+        speed = event.data2 - Encoder.DECREMENT_BASE
+        if speed <= 2:
+            step = 1
+        elif speed <= 10:
+            step = 3
+        elif speed <= 20:
+            step = 5
+        else:
+            step = 10
+        state.free_encoder_values[index] = max(0, state.free_encoder_values[index] - step)
+
+    # Modify event to absolute value for FL Studio
+    event.data2 = state.free_encoder_values[index]
+    return True
+
+
+# ---------------------------------------------------------------------------
 #  Main dispatcher
 # ---------------------------------------------------------------------------
 
@@ -60,10 +146,16 @@ def handle_mixer(event, state, pages):
     """
     # --- Fader: Pitch Bend on channels 0–8 ---
     if event.midiId == PITCH_BEND_STATUS and event.midiChan in Fader.ALL_CHANNELS:
-        if state.plugin_mode and event.midiChan < Fader.MASTER_CHANNEL:
-            return False  # Plugin focus: mixer faders 1-8 disabled (master stays active)
-        if state.free_mode and event.midiChan < Fader.MASTER_CHANNEL:
-            return False  # Passthrough: slot 1–8 in Free Mode
+        index = event.midiChan
+        if index < Fader.MASTER_CHANNEL:
+            if state.free_mode:
+                return False  # Passthrough: slot 1–8 in Free Mode (handled by handle_free_fader)
+            if state.plugin_mode:
+                # Plugin focus without Free Mode: show hint that faders are disabled
+                pages.SetPageLines('fader', line1='Fader %d' % (index + 1), line2='Use Free Mode')
+                pages.SetActivePage('fader', expires=1000)
+                event.handled = True
+                return True  # Swallow the event
         _do_fader(event, state, pages)
         event.handled = True
         return True
@@ -72,10 +164,15 @@ def handle_mixer(event, state, pages):
         # --- Touch sensor: notes 104–112 ---
         if event.data1 in Fader.ALL_TOUCH_NOTES:
             index = event.data1 - Fader.TOUCH_1
-            if state.plugin_mode and index < Fader.MASTER_CHANNEL:
-                return False  # Plugin focus: touch sensors 1-8 disabled
-            if state.free_mode and index < Fader.MASTER_CHANNEL:
-                return False  # Passthrough touch in Free Mode
+            if index < Fader.MASTER_CHANNEL:
+                if state.free_mode:
+                    return False  # Passthrough touch in Free Mode
+                if state.plugin_mode:
+                    # Plugin focus without Free Mode: show hint
+                    pages.SetPageLines('fader', line1='Fader %d' % (index + 1), line2='Use Free Mode')
+                    pages.SetActivePage('fader', expires=1000)
+                    event.handled = True
+                    return True  # Swallow the event
             _do_fader_touch(event, state, pages)
             event.handled = True
             return True
@@ -237,8 +334,7 @@ def _do_encoder(event, state, pages):
         delta = speed * _PAN_STEP
     else:
         # Decrement: 64 = -1, 65 = -2, ... 127 = -63
-        speed = raw - 63  # 64->1, 65->2, ... 127->64 (but capped at 63 for practical purposes)
-        speed = min(speed, 63)  # cap at 63 max speed
+        speed = max(1, raw - Encoder.DECREMENT_BASE)  # 64->0->1, 65->1, 127->63
         delta = -speed * _PAN_STEP
 
     if delta == 0:

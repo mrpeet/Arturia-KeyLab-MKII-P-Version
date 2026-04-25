@@ -38,6 +38,9 @@ def handle_plugin_encoder(event, state, pages):
 
     Returns True if handled, False if the event should fall through (free mode).
     """
+    if state.free_mode:
+        return False  # Passthrough: let FL Studio handle it directly
+
     if not state.plugin_mode:
         return False
 
@@ -76,10 +79,10 @@ def handle_plugin_encoder(event, state, pages):
     # data2 0-63 = increment (right), 64-127 = decrement (left)
     if event.data2 <= Encoder.INCREMENT_MAX:
         direction = 1
-        speed = event.data2 if event.data2 >= Encoder.INCREMENT_MIN else 1
+        speed = max(1, event.data2) if event.data2 >= Encoder.INCREMENT_MIN else 1
     else:
         direction = -1
-        speed = 128 - event.data2  # 64->64, 65->63, ... 127->1
+        speed = max(1, event.data2 - Encoder.DECREMENT_BASE)  # 64->0->1, 65->1, 127->63
     current_value = plugins.getParamValue(param_index, chan_index)
     step = ENCODER_STEP * speed
     new_value = max(0.0, min(1.0, current_value + direction * step))

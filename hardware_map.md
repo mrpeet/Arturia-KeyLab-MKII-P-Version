@@ -90,9 +90,16 @@
 *Senden auf dem DAW Port.*
 
 **Die Modus-Knöpfe (Links neben den Fadern):**
-* Part 1 / Next: `Note On 49`
-* Part 2 / Previous: `Note On 48`
-* Live / Bank: `Intern`
+
+| Normal | Note |
+| :--- | :--- |
+| Part 2 / Previous | 48 |
+| Part 1 / Next | 49 |
+| Wenn Live/Bank gedrückt | Note |
+| :--- | :--- |
+| Part 2 / Previous | 46 |
+| Part 1 / Next | 47 |
+*Live / Bank: `Intern` (Hardware-Modus-Umschaltung)*
 
 **Die 9 Fader (Lautstärke):**
 *Senden weiche Übergänge via Pitch Bend. Bei Berührung senden sie eine Note.*

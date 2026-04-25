@@ -157,4 +157,15 @@ In `KeyLabmk2Process.py`, method **`SetPanTrack`** (active definition ~1097): af
 
 ---
 
+## Code Architecture Documentation
+
+For **current modular architecture** (Phase 8+), see the `codemaps/` directory:
+- `codemaps/CODEMAP_INDEX.md` — Navigation and quick start for KI assistance
+- `codemaps/handler_chain.md` — Event routing in `OnMidiMsg()`
+- `codemaps/state.md` — `KeyLabState` attributes and semantics
+- `codemaps/hardware_constants.md` — MIDI mappings from `keylab_config.py`
+- `codemaps/adding_handlers.md` — Template for new handler modules
+- `codemaps/free_mode.md` — Passthrough logic
+- `codemaps/plugin_control.md` — Plugin mode and database schema
+
 *For FL API symbols used in code, cross-check [`FL_Studio_API_Reference.md`](FL_Studio_API_Reference.md). For wire protocol, cross-check [`hardware_map.md`](hardware_map.md).*
