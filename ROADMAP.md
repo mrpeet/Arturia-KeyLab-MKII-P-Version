@@ -140,19 +140,19 @@
 
 ---
 
-## Phase 10 — Plugin-Steuerung ⬜
+## Phase 10 — Plugin-Steuerung ✅
 
 **Ziel:** Encoder 1–8 steuern Plugin-Parameter wenn Plugin fokussiert.
 
-| Aufgabe | Datei |
-|:--------|:------|
-| Plugin-Mode Toggle (auto-detect bei Plugin-Fokus) | `keylab_plugin.py` → Dispatcher |
-| Encoder → Plugin-Parameter (aus plugin_database.py) | `keylab_plugin.py` |
-| Jog Wheel → Preset-Navigation (bei Plugins mit special) | `keylab_plugin.py` |
-| LCD: Parameter-Name + Wert-Anzeige | `keylab_plugin.py` |
-| Fallback: Unbekannte Plugins → Free Mode / Generic | `keylab_plugin.py` |
+| Aufgabe | Datei | Status |
+|:--------|:------|:-------|
+| Plugin-Mode auto-detect (OnIdle → widPlugin) | `device_KeyLabmkII.py` | ✅ |
+| Encoder → Plugin-Parameter (aus plugin_database.py) | `keylab_plugin.py` | ✅ |
+| Jog Wheel → Preset-Navigation (bei Plugins mit special) | `keylab_navigation.py` | ✅ |
+| LCD: Parameter-Name + Wert-Anzeige | `keylab_plugin.py` | ✅ |
+| Fallback: Unbekannte Plugins → Free Mode / Generic | `keylab_plugin.py` | ✅ |
 
-**Testbar:** Plugin öffnen → Encoder steuern die richtigen Parameter.
+**Testbar:** Plugin öffnen → Encoder steuern die richtigen Parameter, LCD zeigt Plugin-Name.
 
 ---
 

@@ -110,7 +110,13 @@ class Encoder:
 
     ALL_CCS = list(range(FIRST, LAST + 1))
 
-    # Relative encoder values
+    # Relative encoder direction detection
+    # 0–63 = increment (right), 64–127 = decrement (left)
+    INCREMENT_MIN = 1
+    INCREMENT_MAX = 63
+    DECREMENT_MIN = 64
+    DECREMENT_MAX = 127
+    # Legacy constants for simple checks
     INCREMENT = 1
     DECREMENT = 65
 

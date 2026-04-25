@@ -15,6 +15,7 @@ from keylab_config import (
     NOTE_OFF_STATUS,
     CC_STATUS,
 )
+from keylab_plugin import handle_plugin_special_jog
 
 
 # ---------------------------------------------------------------------------
@@ -35,6 +36,8 @@ def handle_navigation(event, state, pages):
     """
     # --- Jog Wheel (CC 60) ---
     if event.midiId == CC_STATUS and event.midiChan == 0 and event.data1 == Navigation.JOG_WHEEL_CC:
+        if handle_plugin_special_jog(event, state, pages):
+            return True
         _do_jog(event, pages)
         event.handled = True
         return True
@@ -69,11 +72,6 @@ def handle_navigation(event, state, pages):
 def _do_jog(event, pages):
     """Route jog wheel to context-sensitive navigation action."""
     direction = 1 if event.data2 == _JOG_RIGHT else -1
-
-    if ui.getFocused(midi.widPlugin):
-        # Plugin focused → close plugin, go back to Channel Rack
-        ui.showWindow(midi.widChannelRack)
-        return
 
     if ui.getFocused(midi.widBrowser):
         # Browser → navigate items

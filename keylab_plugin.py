@@ -6,7 +6,12 @@ import plugins
 import channels
 import ui
 
-from keylab_config import Encoder
+from keylab_config import (
+    Encoder,
+    NOTE_ON_STATUS,
+    NOTE_OFF_STATUS,
+    CC_STATUS,
+)
 from plugin_database import (
     get_plugin_params,
     get_plugin_special,
@@ -49,9 +54,11 @@ def handle_plugin_encoder(event, state, pages):
     # Look up in database
     params = get_plugin_params(plugin_name)
     if params is None:
-        # Unknown plugin — print hint and fall through to free mode
-        print("[Plugin] '%s' not in database — free mode" % plugin_name)
-        return False
+        # Unknown plugin — block event and warn on LCD (do NOT fall through to Pan!)
+        pages.SetPageLines('plugin', line1=plugin_name, line2='Not mapped!')
+        pages.SetActivePage('plugin', expires=2000)
+        event.handled = True
+        return True
 
     # Get the parameter for this encoder slot
     if encoder_index >= len(params):
@@ -66,9 +73,15 @@ def handle_plugin_encoder(event, state, pages):
     chan_index = channels.selectedChannel()
 
     # Compute new value from relative encoder movement
-    direction = 1 if event.data2 == Encoder.INCREMENT else -1
+    # data2 0-63 = increment (right), 64-127 = decrement (left)
+    if event.data2 <= Encoder.INCREMENT_MAX:
+        direction = 1
+        speed = event.data2 if event.data2 >= Encoder.INCREMENT_MIN else 1
+    else:
+        direction = -1
+        speed = 128 - event.data2  # 64->64, 65->63, ... 127->1
     current_value = plugins.getParamValue(param_index, chan_index)
-    step = ENCODER_STEP
+    step = ENCODER_STEP * speed
     new_value = max(0.0, min(1.0, current_value + direction * step))
 
     # Apply

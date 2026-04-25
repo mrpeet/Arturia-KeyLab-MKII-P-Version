@@ -20,6 +20,7 @@ from keylab_transport import handle_transport
 from keylab_daw_commands import handle_daw_commands
 from keylab_navigation import handle_navigation
 from keylab_mixer import handle_mixer
+from keylab_plugin import handle_plugin_encoder, handle_plugin_special_jog
 from keylab_feedback import update_transport_leds, clear_all_leds
 
 
@@ -80,13 +81,13 @@ def OnMidiMsg(event):
         event.handled = True
         return
 
-    if handle_mixer(event, _state, _pages):
+    if handle_plugin_encoder(event, _state, _pages):
         event.handled = True
         return
 
-    # --- Future handlers (uncomment as implemented) ---
-    # if handle_plugin_encoder(event, _state, _pages):
-    #     return
+    if handle_mixer(event, _state, _pages):
+        event.handled = True
+        return
 
     # --- Unhandled: log for development ---
     print("MIDI | id: %d  data1: %d  data2: %d  chan: %d  port: %d" % (
@@ -101,6 +102,7 @@ def OnRefresh(flags):
 
 def OnIdle():
     _pages.Refresh()
+    _update_plugin_mode()
 
 
 def OnUpdateBeatIndicator(value):
@@ -118,6 +120,24 @@ def OnSysEx(event):
 # ---------------------------------------------------------------------------
 #  Internal helpers
 # ---------------------------------------------------------------------------
+
+def _update_plugin_mode():
+    """Auto-detect plugin focus and toggle plugin_mode in state."""
+    if _state.free_mode:
+        return  # Free Mode overrides everything — no auto plugin detection
+    import midi as _midi
+    import plugins as _plugins
+    focused = ui.getFocused(_midi.widPlugin)
+    if focused != _state.plugin_mode:
+        _state.plugin_mode = focused
+        if focused:
+            try:
+                name = _plugins.getPluginName(channels.selectedChannel())
+            except Exception:
+                name = "Plugin"
+            _pages.SetPageLines('plugin', line1=name, line2='Plugin Mode')
+            _pages.SetActivePage('plugin', expires=1200)
+
 
 def _sync_main_display():
     """Update the persistent 'main' page with current channel/pattern info."""

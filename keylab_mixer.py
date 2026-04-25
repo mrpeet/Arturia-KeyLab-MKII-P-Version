@@ -42,9 +42,10 @@ def _pb_to_raw(data1, data2):
 
 
 # ---------------------------------------------------------------------------
-#  Track Button long-press state
+#  Long-press state (Track Buttons + Bank Prev for Free Mode)
 # ---------------------------------------------------------------------------
-_btn_press_times = {}  # index → press timestamp
+_btn_press_times = {}   # track button index → press timestamp
+_bank_prev_press_time = 0.0
 _LONG_PRESS_THRESHOLD = 1.0  # seconds
 
 
@@ -59,6 +60,10 @@ def handle_mixer(event, state, pages):
     """
     # --- Fader: Pitch Bend on channels 0–8 ---
     if event.midiId == PITCH_BEND_STATUS and event.midiChan in Fader.ALL_CHANNELS:
+        if state.plugin_mode and event.midiChan < Fader.MASTER_CHANNEL:
+            return False  # Plugin focus: mixer faders 1-8 disabled (master stays active)
+        if state.free_mode and event.midiChan < Fader.MASTER_CHANNEL:
+            return False  # Passthrough: slot 1–8 in Free Mode
         _do_fader(event, state, pages)
         event.handled = True
         return True
@@ -66,25 +71,39 @@ def handle_mixer(event, state, pages):
     if event.midiId in (NOTE_ON_STATUS, NOTE_OFF_STATUS) and event.midiChan == 0:
         # --- Touch sensor: notes 104–112 ---
         if event.data1 in Fader.ALL_TOUCH_NOTES:
+            index = event.data1 - Fader.TOUCH_1
+            if state.plugin_mode and index < Fader.MASTER_CHANNEL:
+                return False  # Plugin focus: touch sensors 1-8 disabled
+            if state.free_mode and index < Fader.MASTER_CHANNEL:
+                return False  # Passthrough touch in Free Mode
             _do_fader_touch(event, state, pages)
             event.handled = True
             return True
 
         # --- Track buttons: notes 24–32 ---
         if event.data1 in TrackButton.ALL_NOTES:
+            index = event.data1 - TrackButton.FIRST
+            if state.plugin_mode and index < 8:
+                return False  # Plugin focus: track buttons 1-8 disabled
+            if state.free_mode and index < 8:
+                return False  # Passthrough track buttons 1–8 in Free Mode
             _do_track_button(event, state, pages)
             event.handled = True
             return True
 
         # --- Bank Prev/Next: notes 48–49 ---
         if event.data1 in BankButton.ALL_NOTES:
-            if event.data2 > 0:
-                _do_bank(event, state, pages)
+            _do_bank(event, state, pages)
             event.handled = True
             return True
 
-    # --- Encoder (Pan): CC 16–24 ---
+    # --- Encoder (Pan / Plugin): CC 16–24 ---
     if event.midiId == CC_STATUS and event.midiChan == 0 and event.data1 in Encoder.ALL_CCS:
+        index = event.data1 - Encoder.FIRST
+        if state.plugin_mode and index < 8:
+            return False  # Plugin focus: encoders 1-8 disabled (handled by plugin handler)
+        if state.free_mode and index < 8:
+            return False  # Passthrough encoders 1–8 in Free Mode
         _do_encoder(event, state, pages)
         event.handled = True
         return True
@@ -210,12 +229,17 @@ def _do_encoder(event, state, pages):
     """Relative encoder → Pan control."""
     index = event.data1 - Encoder.FIRST  # 0–8
 
-    # Relative value: 1–63 = right, 65–127 = left
+    # Relative value: 0-63 = increment (right), 64-127 = decrement (left)
     raw = event.data2
-    if raw < 64:
-        delta = raw * _PAN_STEP
+    if raw <= Encoder.INCREMENT_MAX:
+        # Increment: scale by speed, minimum 1
+        speed = max(1, raw) if raw >= Encoder.INCREMENT_MIN else 1
+        delta = speed * _PAN_STEP
     else:
-        delta = -(raw - 64) * _PAN_STEP
+        # Decrement: 64 = -1, 65 = -2, ... 127 = -63
+        speed = raw - 63  # 64->1, 65->2, ... 127->64 (but capped at 63 for practical purposes)
+        speed = min(speed, 63)  # cap at 63 max speed
+        delta = -speed * _PAN_STEP
 
     if delta == 0:
         return
@@ -264,17 +288,35 @@ def _show_pan_hint(pages, index, label, pan_value):
 # ---------------------------------------------------------------------------
 
 def _do_track_button(event, state, pages):
-    """Short press = Reset Pan, Long press = Toggle Mute."""
+    """Track button handler — behavior depends on focused window.
+
+    Mixer focus:
+        Short press = Reset Pan
+        Long press = Toggle Mute
+
+    Channel Rack focus:
+        Short press = Toggle Mute
+        Long press = Toggle Solo
+    """
     index = event.data1 - TrackButton.FIRST  # 0–8
 
     if event.data2 > 0:
         _btn_press_times[index] = time.time()
     else:
         duration = time.time() - _btn_press_times.get(index, 0)
+        is_mixer = ui.getFocused(midi.widMixer)
         if duration >= _LONG_PRESS_THRESHOLD:
-            _toggle_mute(index, state, pages)
+            # Long press: Mute (Mixer) or Solo (Channel Rack)
+            if is_mixer:
+                _toggle_mute(index, state, pages)
+            else:
+                _toggle_solo(index, state, pages)
         else:
-            _reset_pan(index, state, pages)
+            # Short press: Pan Reset (Mixer) or Mute (Channel Rack)
+            if is_mixer:
+                _reset_pan(index, state, pages)
+            else:
+                _toggle_mute(index, state, pages)
 
 
 def _reset_pan(index, state, pages):
@@ -297,13 +339,41 @@ def _reset_pan(index, state, pages):
 
 
 def _do_bank(event, state, pages):
-    """Shift bank offset left or right by 8 channels/tracks."""
+    """Bank Prev/Next handling.
+
+    Bank Prev short press  → bank_offset - 1
+    Bank Prev long press   → toggle Free Mode
+    Bank Next short press  → bank_offset + 1
+    """
+    global _bank_prev_press_time
+
     if event.data1 == BankButton.PART2_PREV:
-        state.bank_offset = max(0, state.bank_offset - 1)
+        if event.data2 > 0:
+            # Record press time
+            _bank_prev_press_time = time.time()
+        else:
+            # Release — decide short vs long
+            duration = time.time() - _bank_prev_press_time
+            if duration >= _LONG_PRESS_THRESHOLD:
+                state.free_mode = not state.free_mode
+                if state.free_mode:
+                    pages.SetPageLines('bank', line1='FREE MODE', line2='Active')
+                else:
+                    pages.SetPageLines('bank', line1='FREE MODE', line2='Off')
+                pages.SetActivePage('bank', expires=1500)
+            else:
+                state.bank_offset = max(0, state.bank_offset - 1)
+                _show_bank_hint(state, pages)
     else:
-        state.bank_offset += 1
-    # Reset fader pickup so values don't jump after bank change
+        # Bank Next — only on press
+        if event.data2 > 0:
+            state.bank_offset += 1
+            _show_bank_hint(state, pages)
+    # Reset fader pickup after any bank change
     state.fader_pickup_active = [False] * Fader.COUNT
+
+
+def _show_bank_hint(state, pages):
     pages.SetPageLines('bank', line1='Bank', line2='Tracks %d-%d' % (
         state.bank_offset * 8 + 1, state.bank_offset * 8 + 8))
     pages.SetActivePage('bank', expires=1200)
@@ -324,6 +394,27 @@ def _toggle_mute(index, state, pages):
             if ch < channels.channelCount():
                 channels.muteChannel(ch)
                 status = 'Muted' if channels.isChannelMuted(ch) else 'Unmuted'
+                pages.SetPageLines('enc', line1=channels.getChannelName(ch), line2=status)
+                pages.SetActivePage('enc', expires=1000)
+    except Exception:
+        pass
+
+
+def _toggle_solo(index, state, pages):
+    """Toggle solo for Channel Rack channel (Mixer: fallback to track solo)."""
+    try:
+        if ui.getFocused(midi.widMixer):
+            track = index + 1 + state.bank_offset * 8
+            if track < mixer.getTrackCount():
+                mixer.soloTrack(track)
+                status = 'Solo' if mixer.isTrackSolo(track) else 'Unsolo'
+                pages.SetPageLines('enc', line1=mixer.getTrackName(track), line2=status)
+                pages.SetActivePage('enc', expires=1000)
+        else:
+            ch = index + state.bank_offset * 8
+            if ch < channels.channelCount():
+                channels.soloChannel(ch)
+                status = 'Solo' if channels.isChannelSolo(ch) else 'Unsolo'
                 pages.SetPageLines('enc', line1=channels.getChannelName(ch), line2=status)
                 pages.SetActivePage('enc', expires=1000)
     except Exception:
