@@ -4,6 +4,7 @@
 
 import plugins
 import channels
+import midi
 import ui
 
 from keylab_config import (
@@ -131,7 +132,10 @@ def handle_plugin_special_jog(event, state, pages):
     chan_index = channels.selectedChannel()
 
     if jog_action == "preset_navigation":
-        direction = 1 if event.data2 == 1 else -1
+        if event.data2 <= Encoder.INCREMENT_MAX:
+            direction = 1
+        else:
+            direction = -1
         if direction > 0:
             plugins.nextPreset(chan_index)
         else:
@@ -181,7 +185,7 @@ def scan_plugin_params(max_params=30):
 def _get_focused_plugin_name():
     """Get the name of the currently focused plugin, or None."""
     try:
-        if ui.getFocused(5):  # widPlugin = 5
+        if ui.getFocused(midi.widPlugin):
             return plugins.getPluginName(channels.selectedChannel())
     except Exception:
         pass

@@ -2,8 +2,6 @@
 # Handles: Snap, NewPattern, FocusMixer, Undo/Cut, Metronome, Overdub, TapTempo, Redo
 # Phase 6 — see ROADMAP.md
 
-import time
-
 import general
 import midi
 import patterns
@@ -13,18 +11,14 @@ import ui
 from keylab_config import (
     TrackControl,
     GlobalControl,
+    LiveBankButton,
     NOTE_ON_STATUS,
     NOTE_OFF_STATUS,
     PRESSED,
     RELEASED,
 )
-
-
-# ---------------------------------------------------------------------------
-#  Long-Press Detection State (for Undo/Cut)
-# ---------------------------------------------------------------------------
-_undo_press_start = 0.0
-_LONG_PRESS_THRESHOLD = 1.0  # seconds
+import keylab_shared_state as pad_state
+import keylab_long_press as long_press
 
 
 # ---------------------------------------------------------------------------
@@ -36,8 +30,6 @@ def handle_daw_commands(event, state, pages):
 
     Returns True if handled, False otherwise.
     """
-    global _undo_press_start
-
     if event.midiId not in (NOTE_ON_STATUS, NOTE_OFF_STATUS) or event.midiChan != 0:
         return False
 
@@ -66,9 +58,13 @@ def handle_daw_commands(event, state, pages):
 
     if event.data1 == TrackControl.WRITE:
         if event.data2 > 0:
-            _undo_press_start = time.time()
+            long_press.begin(
+                'daw_undo',
+                on_long=lambda: _do_cut(pages),
+                on_short=lambda: _do_undo(pages),
+            )
         else:
-            _do_undo_or_cut(event, pages)
+            long_press.release('daw_undo')
         return True
 
     # Global Controls (Row 2 buttons)
@@ -79,7 +75,13 @@ def handle_daw_commands(event, state, pages):
 
     if event.data1 == GlobalControl.IN:
         if event.data2 > 0:
-            _do_toggle_pad_mode(event, state, pages)
+            long_press.begin(
+                'daw_in',
+                on_long=lambda: _do_toggle_pad_velocity(state, pages),
+                on_short=lambda: _do_toggle_pad_mode(state, pages),
+            )
+        else:
+            long_press.release('daw_in')
         return True
 
     if event.data1 == GlobalControl.OUT:
@@ -95,6 +97,17 @@ def handle_daw_commands(event, state, pages):
     if event.data1 == GlobalControl.UNDO:
         if event.data2 > 0:
             _do_redo(event, pages)
+        return True
+
+    # Live/Bank modifier buttons for pad bank navigation (only in Chromatic mode)
+    if event.data1 == LiveBankButton.PREV:
+        if event.data2 > 0:
+            _do_pad_bank_prev(event, state, pages)
+        return True
+
+    if event.data1 == LiveBankButton.NEXT:
+        if event.data2 > 0:
+            _do_pad_bank_next(event, state, pages)
         return True
 
     return False
@@ -134,20 +147,17 @@ def _do_tap_tempo(event, pages):
     _show_hint(pages, "Tap Tempo")
 
 
-def _do_undo_or_cut(event, pages):
-    """Short press = Undo, Long press (>1s) = Cut."""
-    global _undo_press_start
-    duration = time.time() - _undo_press_start
+def _do_undo(pages):
+    """Short press on Write = Undo."""
+    general.undoUp()
+    _show_hint(pages, "Undo")
 
-    if duration > _LONG_PRESS_THRESHOLD:
-        # Long press = Cut
-        _show_and_focus_channel_rack()
-        ui.cut()
-        _show_hint(pages, "Cut")
-    else:
-        # Short press = Undo
-        general.undoUp()
-        _show_hint(pages, "Undo")
+
+def _do_cut(pages):
+    """Long press on Write = Cut (fires at threshold via OnIdle)."""
+    _show_and_focus_channel_rack()
+    ui.cut()
+    _show_hint(pages, "Cut")
 
 
 def _do_toggle_browser_cr(event, pages):
@@ -160,14 +170,23 @@ def _do_toggle_browser_cr(event, pages):
         _show_hint(pages, "Browser")
 
 
-def _do_toggle_pad_mode(event, state, pages):
-    """Toggle between FPC and Chromatic pad modes."""
-    if state.pad_mode == "fpc":
-        state.pad_mode = "chromatic"
+def _do_toggle_pad_mode(state, pages):
+    """Toggle between Drum Map (GM drums, ch10) and Chromatic (C3+, ch1)."""
+    if state.pad_mode == pad_state.PAD_MODE_FPC:
+        state.pad_mode = pad_state.PAD_MODE_CHROMATIC
         _show_hint(pages, "Pads: Chromatic")
     else:
-        state.pad_mode = "fpc"
-        _show_hint(pages, "Pads: FPC")
+        state.pad_mode = pad_state.PAD_MODE_FPC
+        _show_hint(pages, "Pads: Drum Map")
+    print("Pad mode -> %s (shared state + file)" % state.pad_mode)
+
+
+def _do_toggle_pad_velocity(state, pages):
+    """Toggle pad velocity sensitivity (off = fixed 75% MIDI velocity)."""
+    state.pad_velocity_enabled = not state.pad_velocity_enabled
+    label = "On" if state.pad_velocity_enabled else "Off"
+    _show_hint(pages, "Pad Velocity: " + label)
+    print("Pad velocity -> %s (shared state + file)" % label)
 
 
 def _do_toggle_overdub(event, pages):
@@ -186,6 +205,38 @@ def _do_redo(event, pages):
     """Redo last undone action."""
     general.undoDown()
     _show_hint(pages, "Redo")
+
+
+def _do_pad_bank_prev(event, state, pages):
+    """Decrement pad bank offset (works in both Drum Map and Chromatic mode)."""
+    if state.pad_bank_offset > 0:
+        state.pad_bank_offset -= 1
+    _show_pad_bank_hint(state, pages)
+
+
+def _do_pad_bank_next(event, state, pages):
+    """Increment pad bank offset (works in both Drum Map and Chromatic mode)."""
+    if state.pad_bank_offset < state.pad_bank_count - 1:
+        state.pad_bank_offset += 1
+    _show_pad_bank_hint(state, pages)
+
+
+def _show_pad_bank_hint(state, pages):
+    """Show pad bank number and note range on display."""
+    # Chromatic range starts at C3 (48); Drum Map uses GM drum notes in same span
+    base_low = 48 + state.pad_bank_offset * 16
+    base_high = 48 + 15 + state.pad_bank_offset * 16
+    note_range = "(%s-%s)" % (_note_to_name(base_low), _note_to_name(base_high))
+    pages.SetPageLines('padbank', line1='Pads: Bank %d' % (state.pad_bank_offset + 1), line2=note_range)
+    pages.SetActivePage('padbank', expires=1500)
+
+
+def _note_to_name(note_num):
+    """Convert MIDI note number to note name (e.g., 60 -> 'C4')."""
+    notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    octave = (note_num // 12) - 2
+    note_idx = note_num % 12
+    return '%s%d' % (notes[note_idx], octave)
 
 
 # ---------------------------------------------------------------------------

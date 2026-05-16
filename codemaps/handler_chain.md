@@ -8,11 +8,27 @@ pattern: Chain of Responsibility
 
 ## Handler Chain (Priorität von oben nach unten)
 
+**Keys Port (separates Script):** Pad-Noten werden in `device_KeyLabmkII_Forward.OnMidiIn` transponiert — sie erreichen `device_KeyLabmkII.OnMidiMsg` nicht.
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  MIDI Event kommt rein (event.midiId, event.data1, event.data2)  │
+│  MIDI Event kommt rein (DAW Port · event.midiId, data1, data2)   │
 └─────────────────┬───────────────────────────────────────────────┘
                   ▼
+┌─────────────────────────────────────┐
+│ 0a. handle_free_fader()            │
+│     Free Mode: PB Ch 0–7 jitter    │
+│     filter → pass (handled=False)  │
+└──────────────┬────────────────────────┘
+               │ returns True → event.handled=False, return
+               ▼
+┌─────────────────────────────────────┐
+│ 0b. handle_free_encoder()          │
+│     Free Mode: relative → absolute │
+│     CC 16–23 → pass                │
+└──────────────┬────────────────────────┘
+               │ returns True → event.handled=False, return
+               ▼
 ┌─────────────────────────────────────┐
 │ 1. handle_transport()               │
 │    - Play/Stop/Record               │
@@ -56,7 +72,7 @@ pattern: Chain of Responsibility
 │    - Encoder (Pan, CC 16-24)         │
 │    - Track Buttons (Note 24-32)      │
 │    - Bank Prev/Next (Note 48-49)     │
-│    - Free Mode Check (Passthrough)    │
+│    - Free/Plugin Mode passthrough     │
 └──────────────┬────────────────────────┘
                │ returns True → event.handled = True, return
                │ returns False → log unhandled

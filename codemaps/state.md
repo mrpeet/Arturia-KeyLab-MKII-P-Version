@@ -13,9 +13,11 @@ passed_to: All handler functions as `state` parameter
 
 | Attribut | Typ | Werte | Beschreibung |
 |----------|-----|-------|--------------|
-| `focus_mode` | str | `FocusMode.MIXER`, `FocusMode.CHANNEL` | Bestimmt, ob Fader/Encoder Mixer oder Channel Rack steuern |
-| `pad_mode` | str | `PadMode.FPC`, `PadMode.CHROMATIC` | Pad-Spielmodus (Drum vs. chromatisch) |
-| `track_button_mode` | str | `TrackButtonMode.SELECT`, `SOLO`, `MUTE` | Was Track Buttons tun (zyklisch umschaltbar) |
+| `pad_mode` | str | `'fpc'`, `'chromatic'` | Pad-Spielmodus (LCD: Drum Map / Chromatic) — **delegiert** zu `keylab_shared_state` |
+| `pad_bank_offset` | int | 0–5 | Pad-Bank — delegiert zu `keylab_shared_state` |
+| `pad_velocity_enabled` | bool | `True` / `False` | Pad-Velocity; Off → feste Note-On-Velocity 95 (75%) im Forward-Script |
+| `focus_mode` | str | `FocusMode.*` | **Reserviert** — aktuell ungenutzt; Mixer/CR-Umschaltung via `ui.getFocused()` |
+| `track_button_mode` | str | `TrackButtonMode.*` | **Reserviert** — Track-Buttons nutzen festes Short/Long-Verhalten in `keylab_mixer.py` |
 
 ### Banking
 
@@ -29,7 +31,7 @@ passed_to: All handler functions as `state` parameter
 |----------|-----|--------------|
 | `free_mode` | bool | `True` = Fader 1-8, Encoder 1-8, Track Buttons 1-8 werden durchgereicht (kein Handling). Slot 9 (Master) immer aktiv. |
 
-**Activation**: Long Press (>1s) auf "Bank Prev" Button (Note 48). Siehe `keylab_mixer.py:_do_bank()`
+**Activation**: Long Press (≥0,75 s) auf "Bank Prev" Button (Note 48). Aktion + LCD bei Schwelle via `keylab_long_press.poll()`. Siehe `keylab_mixer.py:_toggle_free_mode()`
 
 **Deactivation**: Erneuter Long Press auf "Bank Prev"
 
@@ -40,12 +42,16 @@ passed_to: All handler functions as `state` parameter
 | `FADER_JITTER_THRESHOLD` | int | 0-16383 | Min. Delta (14-bit) bevor Fader-Wert akzeptiert wird |
 | `fader_last_sent_value` | list[int] | 8 Elemente | Letzter tatsächlich gesendeter 14-bit Wert pro Fader |
 | `fader_pickup_active` | list[bool] | 9 Elemente (inkl. Master) | `True` = Physikalischer Fader hat Software-Wert gekreuzt |
-| `fader_last_fl_value` | list[float] | 9 Elemente | Letzter bekannter FL Studio Volume-Wert (0.0-1.0) pro Slot |
+| `fader_last_fl_value` | list[float] | 9 Elemente | **Nicht aktiv genutzt** — Pickup vergleicht live mit `_get_current_fl_volume()` |
+| `fader_touch_pressed` | list[bool] | 9 Elemente | Debounce: letzter Touch-Sensor-Zustand pro Fader |
+| `fader_last_touch_ms` | list[float] | 9 Elemente | Zeitstempel für Touch-Debounce |
+| `fader_display_last_index` | int | — | LCD-Throttle: zuletzt angezeigter Fader |
+| `fader_display_last_ms` | float | — | LCD-Throttle: Zeitstempel |
 
 **Soft Pickup Logik**: Siehe `keylab_mixer.py:_do_fader()`
 1. Fader wird berührt → Touch-Note empfangen
-2. Erster PB-Wert → Vergleich mit `fader_last_fl_value`
-3. Wenn gekreuzt → `pickup_active = True`, Werte werden gesendet
+2. Erster PB-Wert → Vergleich mit aktuellem FL-Volume (`mixer`/`channels`)
+3. Wenn gekreuzt → `fader_pickup_active = True`, Werte werden gesendet
 4. Wenn nicht gekreuzt → Werte werden ignoriert
 
 ### Plugin Mode

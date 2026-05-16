@@ -11,7 +11,9 @@
 
 import ui
 import channels
+import mixer
 import patterns
+import midi
 from keylab_display import KeyLabDisplay
 from keylab_pages import KeyLabPagedDisplay
 from keylab_dispatch import send_to_device
@@ -19,9 +21,13 @@ from keylab_state import KeyLabState
 from keylab_transport import handle_transport
 from keylab_daw_commands import handle_daw_commands
 from keylab_navigation import handle_navigation
-from keylab_mixer import handle_mixer, handle_free_fader, handle_free_encoder
+from keylab_mixer import handle_mixer, handle_free_fader, handle_free_encoder, reset_soft_pickup_on_focus_change
 from keylab_plugin import handle_plugin_encoder, handle_plugin_special_jog
 from keylab_feedback import update_transport_leds, clear_all_leds
+import keylab_long_press
+
+# Set True only while debugging MIDI routing in Script Output
+_DEBUG_MIDI = False
 
 
 # ---------------------------------------------------------------------------
@@ -68,9 +74,16 @@ def OnMidiMsg(event):
     Order: Free Encoder (modifies to absolute) → Transport → DAW Commands → Navigation → Plugin → Mixer
     First handler that returns True wins; unhandled events are logged.
     """
+    if _DEBUG_MIDI and event.midiId == midi.PITCH_BEND_STATUS:
+        print("DEBUG: Fader chan=%d data1=%d data2=%d" % (event.midiChan, event.data1, event.data2))
+
     # --- Free Mode: Jitter-filtered fader passthrough (must be first) ---
-    if handle_free_fader(event, _state):
+    free_fader = handle_free_fader(event, _state)
+    if free_fader == 1:
         event.handled = False  # Pass filtered Pitch Bend to FL Studio
+        return
+    if free_fader == 2:
+        event.handled = True   # Swallow jitter in Free Mode
         return
 
     # --- Free Mode: Convert relative encoders to absolute ---
@@ -99,9 +112,14 @@ def OnMidiMsg(event):
         event.handled = True
         return
 
-    # --- Unhandled: log for development ---
-    print("MIDI | id: %d  data1: %d  data2: %d  chan: %d  port: %d" % (
-        event.midiId, event.data1, event.data2, event.midiChan, event.port))
+    # Note: Pad events (Channel 10, Notes 36-51) arrive on the Keys port and
+    # are transposed by device_KeyLabmkII_Forward.py based on pad_mode +
+    # pad_bank_offset stored in keylab_shared_state. They never reach this
+    # script (DAW port).
+
+    if _DEBUG_MIDI:
+        print("MIDI | id: %d  data1: %d  data2: %d  chan: %d  port: %d" % (
+            event.midiId, event.data1, event.data2, event.midiChan, event.port))
 
 
 def OnRefresh(flags):
@@ -112,7 +130,10 @@ def OnRefresh(flags):
 
 def OnIdle():
     _pages.Refresh()
+    keylab_long_press.poll()
     _update_plugin_mode()
+    _sync_mixer_bank()
+    reset_soft_pickup_on_focus_change(_state)
 
 
 def OnUpdateBeatIndicator(value):
@@ -121,10 +142,10 @@ def OnUpdateBeatIndicator(value):
 
 
 def OnSysEx(event):
-    # DEBUG: Log SysEx but don't process to avoid feedback loops
-    # Some Arturia SysEx messages can trigger device re-detection
-    print("DEBUG SysEx received: " + str(event.sysex)[:50] + "...")
-    event.handled = True  # Mark as handled to stop propagation
+    # Swallow inbound SysEx to avoid feedback / re-detection loops
+    if _DEBUG_MIDI:
+        print("DEBUG SysEx: " + str(event.sysex)[:50] + "...")
+    event.handled = True
 
 
 # ---------------------------------------------------------------------------
@@ -135,9 +156,8 @@ def _update_plugin_mode():
     """Auto-detect plugin focus and toggle plugin_mode in state."""
     if _state.free_mode:
         return  # Free Mode overrides everything — no auto plugin detection
-    import midi as _midi
     import plugins as _plugins
-    focused = ui.getFocused(_midi.widPlugin)
+    focused = ui.getFocused(midi.widPlugin)
     if focused != _state.plugin_mode:
         _state.plugin_mode = focused
         if focused:
@@ -149,6 +169,25 @@ def _update_plugin_mode():
             _pages.SetActivePage('plugin', expires=1200)
 
 
+def _sync_mixer_bank():
+    """Auto-sync bank offset to selected mixer track so it's always visible.
+
+    When mixer is focused and a track is selected (via jog wheel or mouse),
+    automatically switch to the correct bank so the track is on faders 1-8.
+    Master track (0) is always on fader 9 and doesn't affect bank selection.
+    """
+    if not ui.getFocused(midi.widMixer):
+        return  # Only sync when mixer is focused
+
+    current_track = mixer.trackNumber()
+    if current_track == 0:
+        return  # Master is always on fader 9
+
+    target_bank = (current_track - 1) // 8
+    if target_bank != _state.bank_offset:
+        _state.bank_offset = target_bank
+
+
 def _sync_main_display():
     """Update the persistent 'main' page with current channel/pattern info."""
     active_index = channels.selectedChannel()
@@ -156,7 +195,20 @@ def _sync_main_display():
     pattern_number = patterns.patternNumber()
     pattern_name = patterns.getPatternName(pattern_number)
 
+    tag = '--'
+    try:
+        if ui.getFocused(midi.widMixer):
+            tag = 'Mx'
+        elif ui.getFocused(midi.widChannelRack):
+            tag = 'CR'
+        elif ui.getFocused(midi.widPlugin):
+            tag = 'PI'
+        elif ui.getFocused(midi.widBrowser):
+            tag = 'BR'
+    except Exception:
+        pass
+
     _pages.SetPageLines(
         'main',
-        line1='%d - %s' % (active_index + 1, channel_name),
+        line1='%s %d-%s' % (tag, active_index + 1, channel_name),
         line2='%s' % pattern_name)

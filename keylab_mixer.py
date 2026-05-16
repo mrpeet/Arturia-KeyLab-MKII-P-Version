@@ -20,6 +20,23 @@ from keylab_config import (
     CC_STATUS,
     PITCH_BEND_STATUS,
 )
+import keylab_long_press as long_press
+
+# handle_free_fader return codes
+FREE_FADER_NONE = 0
+FREE_FADER_PASS = 1
+FREE_FADER_SWALLOW = 2
+
+_DEBUG_FADER = False
+
+# Touch sensor debounce (ms) — suppress stuck/flapping Note 104 on Fader 1
+_TOUCH_DEBOUNCE_MS = 80
+# After real Pitch Bend motion, ignore touch name hints briefly (capacitive ghost Note-On)
+_FADER_TOUCH_LCD_SUPPRESS_AFTER_MOVE_MS = 450
+# Min interval between fader value LCD updates while moving
+_FADER_HINT_MIN_INTERVAL_MS = 120
+_FADER_TOUCH_DISPLAY_MS = 1000
+_FADER_VALUE_DISPLAY_MS = 500
 
 
 # ---------------------------------------------------------------------------
@@ -41,42 +58,97 @@ def _pb_to_raw(data1, data2):
     return data2 * 128 + data1
 
 
-# ---------------------------------------------------------------------------
-#  Long-press state (Track Buttons + Bank Prev for Free Mode)
-# ---------------------------------------------------------------------------
-_btn_press_times = {}   # track button index → press timestamp
-_bank_prev_press_time = 0.0
-_LONG_PRESS_THRESHOLD = 1.0  # seconds
+def _fader_index_from_pitch_bend(event):
+    """Map FL Pitch Bend to fader slot 0–8.
+
+    Some FL builds use status 0xE0 for all PB and put the slot in midiChan.
+    Others use the full status byte 0xE0–0xE8 with the slot in the low nibble.
+    Nibble-first would mis-read legacy events (always slot 0).
+    """
+    mid = event.midiId
+    if mid == PITCH_BEND_STATUS and event.midiChan in Fader.ALL_CHANNELS:
+        return event.midiChan
+    if (mid & 0xF0) == PITCH_BEND_STATUS:
+        idx = mid & 0x0F
+        if 0 <= idx < Fader.COUNT:
+            return idx
+    return None
+
+
+# Track last focused window to detect changes and reset soft pickup
+_last_focused_window = None
+
+
+def reset_soft_pickup_on_focus_change(state):
+    """Reset soft pickup for all faders when window focus changes (Mixer ↔ Channel Rack).
+
+    This prevents faders from being 'stuck' when switching between windows
+    because the target values (channel volume vs track volume) are different.
+    """
+    global _last_focused_window
+    import midi
+    import ui
+
+    current_focus = None
+    if ui.getFocused(midi.widMixer):
+        current_focus = 'mixer'
+    elif ui.getFocused(midi.widChannelRack):
+        current_focus = 'channel_rack'
+
+    if current_focus != _last_focused_window:
+        # Focus changed - reset soft pickup and touch debounce state
+        for i in range(Fader.COUNT):
+            state.fader_pickup_active[i] = False
+            state.fader_touch_pressed[i] = False
+            state.fader_last_move_ms[i] = 0.0
+        state.fader_last_any_move_ms = 0.0
+        state.fader_value_hint_until_ms = 0.0
+        _last_focused_window = current_focus
 
 
 # ---------------------------------------------------------------------------
 #  Free Mode: Jitter-Filtered Pitch Bend Passthrough for Faders
 # ---------------------------------------------------------------------------
 
+def _max_bank_offset():
+    """Upper bank index so fader slots stay within mixer tracks or channels."""
+    try:
+        if ui.getFocused(midi.widMixer):
+            count = mixer.getTrackCount()
+            if count <= 1:
+                return 0
+            return max(0, (count - 2) // 8)
+        ch_count = channels.channelCount()
+        if ch_count <= 0:
+            return 0
+        return max(0, (ch_count - 1) // 8)
+    except Exception:
+        return 0
+
+
 def handle_free_fader(event, state):
     """Jitter-filtered Pitch Bend passthrough for Free Mode faders.
 
-    Returns True if event was filtered and should be passed to FL,
-    False if not a Free Mode fader event.
+    Returns FREE_FADER_PASS, FREE_FADER_SWALLOW, or FREE_FADER_NONE.
     """
     if not state.free_mode:
-        return False
+        return FREE_FADER_NONE
 
-    if event.midiId != PITCH_BEND_STATUS or event.midiChan not in Fader.ALL_CHANNELS:
-        return False
+    idx = _fader_index_from_pitch_bend(event)
+    if idx is None:
+        return FREE_FADER_NONE
 
-    index = event.midiChan
-    if index >= Fader.MASTER_CHANNEL:  # Master fader - let normal mixer handle it
-        return False
+    index = idx
+    if index >= Fader.MASTER_CHANNEL:
+        return FREE_FADER_NONE
 
     raw = _pb_to_raw(event.data1, event.data2)
 
-    # Jitter filter - suppress noise from aging faders
     if abs(raw - state.fader_last_sent_value[index]) < state.FADER_JITTER_THRESHOLD:
-        return False  # Swallow the event (jitter)
+        return FREE_FADER_SWALLOW
 
     state.fader_last_sent_value[index] = raw
-    return True  # Pass filtered event to FL Studio
+    return FREE_FADER_PASS
 
 
 # ---------------------------------------------------------------------------
@@ -144,9 +216,9 @@ def handle_mixer(event, state, pages):
 
     Returns True if handled, False otherwise.
     """
-    # --- Fader: Pitch Bend on channels 0–8 ---
-    if event.midiId == PITCH_BEND_STATUS and event.midiChan in Fader.ALL_CHANNELS:
-        index = event.midiChan
+    # --- Fader: Pitch Bend status 0xE0–0xE8 (slot in low nibble) or legacy midiChan ---
+    index = _fader_index_from_pitch_bend(event)
+    if index is not None:
         if index < Fader.MASTER_CHANNEL:
             if state.free_mode:
                 return False  # Passthrough: slot 1–8 in Free Mode (handled by handle_free_fader)
@@ -214,13 +286,19 @@ def handle_mixer(event, state, pages):
 
 def _do_fader(event, state, pages):
     """Handle Pitch Bend fader movement."""
-    index = event.midiChan  # 0–8 (8 = Master)
+    index = _fader_index_from_pitch_bend(event)
+    if index is None:
+        return
     raw   = _pb_to_raw(event.data1, event.data2)
     value = _pb_to_float(event.data1, event.data2)
 
     # --- Jitter filter ---
     if abs(raw - state.fader_last_sent_value[index]) < state.FADER_JITTER_THRESHOLD:
         return
+
+    now_m = _touch_now_ms()
+    state.fader_last_move_ms[index] = now_m
+    state.fader_last_any_move_ms = now_m
 
     # --- Determine target FL value for soft pickup ---
     # _get_current_fl_volume returns FL API scale (0.0–0.8 = 0–100%).
@@ -232,16 +310,17 @@ def _do_fader(event, state, pages):
 
     # --- Soft pickup ---
     if not state.fader_pickup_active[index]:
-        if abs(value - fl_value) < 0.05:
+        delta = abs(value - fl_value)
+        if delta < 0.05:
             state.fader_pickup_active[index] = True
         else:
-            _show_hint(pages, index, "-> %d%%" % int(fl_value * 100))
+            _show_hint(pages, index, "-> %d%%" % int(fl_value * 100), state)
             return
 
     # --- Apply volume ---
     state.fader_last_sent_value[index] = raw
     _set_fl_volume(index, value, state)
-    _show_hint(pages, index, "%d%%" % int(value * 100))  # Show 0–100 % to user
+    _show_hint(pages, index, "%d%%" % int(value * 100), state)
 
 
 def _get_current_fl_volume(index, state):
@@ -286,18 +365,44 @@ def _set_fl_volume(index, value, state):
 #  Touch sensor — show track name on touch, restore on release
 # ---------------------------------------------------------------------------
 
-def _do_fader_touch(event, state, pages):
-    """Show track/channel name when fader is touched; release = pickup reset."""
-    index = event.data1 - Fader.TOUCH_1  # 0–8
+def _touch_now_ms():
+    return time.monotonic() * 1000.0
 
-    if event.data2 > 0:
-        # Touched — show name
-        name = _get_slot_name(index, state)
-        pages.SetPageLines('fader', line1='Fader %d' % (index + 1), line2=name)
-        pages.SetActivePage('fader', expires=2000)
-    else:
-        # Released — reset pickup so FL mouse moves don't cause drift
-        state.fader_pickup_active[index] = False
+
+def _do_fader_touch(event, state, pages):
+    """Show track/channel name on real touch press only.
+
+    Does NOT reset soft pickup on release — noisy touch sensors would
+    otherwise block volume control permanently.
+    """
+    index = event.data1 - Fader.TOUCH_1  # 0–8
+    if index < 0 or index >= Fader.COUNT:
+        return
+
+    pressed = event.data2 > 0
+    now_ms = _touch_now_ms()
+    was_pressed = state.fader_touch_pressed[index]
+
+    # Debounce: ignore rapid repeats of the same state
+    if pressed == was_pressed:
+        if now_ms - state.fader_last_touch_ms[index] < _TOUCH_DEBOUNCE_MS:
+            return
+        if pressed:
+            return  # Still held — do not refresh LCD every event
+
+    state.fader_touch_pressed[index] = pressed
+    state.fader_last_touch_ms[index] = now_ms
+
+    if pressed:
+        # Shared `fader` page: ghost touch on another slot must not overwrite value hints.
+        recent_local = (now_ms - state.fader_last_move_ms[index]
+                        < _FADER_TOUCH_LCD_SUPPRESS_AFTER_MOVE_MS)
+        value_hint_active = (now_ms < state.fader_value_hint_until_ms)
+        if not recent_local and not value_hint_active:
+            name = _get_slot_name(index, state)
+            _show_touch_hint(pages, index, name, state)
+    elif _DEBUG_FADER:
+        print("Fader %d touch release (pickup unchanged)" % (index + 1))
 
 
 def _get_slot_name(index, state):
@@ -380,39 +485,37 @@ def _show_pan_hint(pages, index, label, pan_value):
 
 
 # ---------------------------------------------------------------------------
-#  Track Buttons — Short press = Reset Pan, Long press = Toggle Mute
+#  Track Buttons — Short press = Toggle Mute, Long press = Reset Pan (Mixer)
 # ---------------------------------------------------------------------------
 
 def _do_track_button(event, state, pages):
     """Track button handler — behavior depends on focused window.
 
     Mixer focus:
-        Short press = Reset Pan
-        Long press = Toggle Mute
+        Short press = Toggle Mute
+        Long press = Reset Pan
 
     Channel Rack focus:
         Short press = Toggle Mute
         Long press = Toggle Solo
     """
     index = event.data1 - TrackButton.FIRST  # 0–8
+    key = ('track_btn', index)
 
     if event.data2 > 0:
-        _btn_press_times[index] = time.time()
-    else:
-        duration = time.time() - _btn_press_times.get(index, 0)
-        is_mixer = ui.getFocused(midi.widMixer)
-        if duration >= _LONG_PRESS_THRESHOLD:
-            # Long press: Mute (Mixer) or Solo (Channel Rack)
-            if is_mixer:
-                _toggle_mute(index, state, pages)
-            else:
-                _toggle_solo(index, state, pages)
-        else:
-            # Short press: Pan Reset (Mixer) or Mute (Channel Rack)
-            if is_mixer:
+        def on_long():
+            if ui.getFocused(midi.widMixer):
                 _reset_pan(index, state, pages)
             else:
-                _toggle_mute(index, state, pages)
+                _toggle_solo(index, state, pages)
+
+        long_press.begin(
+            key,
+            on_long=on_long,
+            on_short=lambda: _toggle_mute(index, state, pages),
+        )
+    else:
+        long_press.release(key)
 
 
 def _reset_pan(index, state, pages):
@@ -441,32 +544,45 @@ def _do_bank(event, state, pages):
     Bank Prev long press   → toggle Free Mode
     Bank Next short press  → bank_offset + 1
     """
-    global _bank_prev_press_time
-
     if event.data1 == BankButton.PART2_PREV:
         if event.data2 > 0:
-            # Record press time
-            _bank_prev_press_time = time.time()
+            long_press.begin(
+                'bank_prev',
+                on_long=lambda: _toggle_free_mode(state, pages),
+                on_short=lambda: _do_bank_prev(state, pages),
+            )
         else:
-            # Release — decide short vs long
-            duration = time.time() - _bank_prev_press_time
-            if duration >= _LONG_PRESS_THRESHOLD:
-                state.free_mode = not state.free_mode
-                if state.free_mode:
-                    pages.SetPageLines('bank', line1='FREE MODE', line2='Active')
-                else:
-                    pages.SetPageLines('bank', line1='FREE MODE', line2='Off')
-                pages.SetActivePage('bank', expires=1500)
-            else:
-                state.bank_offset = max(0, state.bank_offset - 1)
-                _show_bank_hint(state, pages)
+            long_press.release('bank_prev')
     else:
-        # Bank Next — only on press
         if event.data2 > 0:
-            state.bank_offset += 1
+            state.bank_offset = min(state.bank_offset + 1, _max_bank_offset())
             _show_bank_hint(state, pages)
-    # Reset fader pickup after any bank change
+            _reset_fader_state_after_bank_change(state)
+
+
+def _do_bank_prev(state, pages):
+    """Short press on Bank Prev = previous fader/encoder bank."""
+    state.bank_offset = max(0, state.bank_offset - 1)
+    _show_bank_hint(state, pages)
+    _reset_fader_state_after_bank_change(state)
+
+
+def _toggle_free_mode(state, pages):
+    """Long press on Bank Prev = toggle Free Mode (fires at threshold via OnIdle)."""
+    state.free_mode = not state.free_mode
+    if state.free_mode:
+        pages.SetPageLines('bank', line1='FREE MODE', line2='Active')
+    else:
+        pages.SetPageLines('bank', line1='FREE MODE', line2='Off')
+    pages.SetActivePage('bank', expires=1500)
+
+
+def _reset_fader_state_after_bank_change(state):
     state.fader_pickup_active = [False] * Fader.COUNT
+    state.fader_touch_pressed = [False] * Fader.COUNT
+    state.fader_last_move_ms = [0.0] * Fader.COUNT
+    state.fader_last_any_move_ms = 0.0
+    state.fader_value_hint_until_ms = 0.0
 
 
 def _show_bank_hint(state, pages):
@@ -521,8 +637,41 @@ def _toggle_solo(index, state, pages):
 #  Display helper
 # ---------------------------------------------------------------------------
 
-def _show_hint(pages, fader_index, value_str):
-    """Show fader value hint on LCD."""
+def _should_throttle_fader_display(state, fader_index, value_str):
+    """Throttle only identical consecutive hints on the same fader (same time window).
+
+    Touch leaves line2 as the channel name; the first % hint must not be dropped
+    because it differs from that name.
+    """
+    now_ms = _touch_now_ms()
+    if (fader_index == state.fader_display_last_index
+            and value_str == state.fader_display_last_value_str
+            and now_ms - state.fader_display_last_ms < _FADER_HINT_MIN_INTERVAL_MS):
+        return True
+    return False
+
+
+def _show_touch_hint(pages, fader_index, name, state):
+    """One-shot touch label (longer expiry, always updates on new press)."""
+    label = "Master" if fader_index == Fader.MASTER_CHANNEL else "Fader %d" % (fader_index + 1)
+    now_ms = _touch_now_ms()
+    state.fader_display_last_index = fader_index
+    state.fader_display_last_ms = now_ms
+    state.fader_display_last_value_str = name
+    pages.SetPageLines('fader', line1=label, line2=name)
+    pages.SetActivePage('fader', expires=_FADER_TOUCH_DISPLAY_MS)
+
+
+def _show_hint(pages, fader_index, value_str, state):
+    """Show fader value hint on LCD (throttled while moving)."""
+    # Always show soft-pickup target ("-> nn%"); throttle only repeated same % text
+    if not value_str.startswith('->') and _should_throttle_fader_display(state, fader_index, value_str):
+        return
     label = "Master" if fader_index == Fader.MASTER_CHANNEL else "Fader %d" % (fader_index + 1)
     pages.SetPageLines('fader', line1=label, line2=value_str)
-    pages.SetActivePage('fader', expires=800)
+    pages.SetActivePage('fader', expires=_FADER_VALUE_DISPLAY_MS)
+    now_m = _touch_now_ms()
+    state.fader_display_last_index = fader_index
+    state.fader_display_last_ms = now_m
+    state.fader_display_last_value_str = value_str
+    state.fader_value_hint_until_ms = now_m + _FADER_VALUE_DISPLAY_MS

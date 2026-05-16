@@ -1,15 +1,14 @@
 # KeyLab mkII — Implementation Map
 
-> **Status:** 🚧 Work in Progress — wird während der Entwicklung aktualisiert.
+> **Status:** Work in Progress — aligned with modular P-version (`keylab_*` modules).
 >
 > Dieses Dokument verbindet die **physischen MIDI-Daten** (Quelle: `hardware_map.md`) mit den
 > **gewünschten FL Studio Funktionen** (Quelle: eigene Planung + `BRAINSTORM.md`).
-> Es dient als verbindlicher Implementierungsplan für das neue Script.
 >
-> **Hinweis:** Das Forward-Script (`device_KeyLabmkII_Forward.py`) ist **optional** und nur für
-> Arturia V-Collection Plugins relevant. Alle anderen Features funktionieren ohne es.
+> **Hinweis:** `device_KeyLabmkII_Forward.py` läuft auf dem **Keys Port** (Pads + optional V-Collection).
+> Das Hauptscript läuft auf **MIDIIN2 / DAW Port**. Beide müssen in FL MIDI Settings zugewiesen sein.
 >
-> **Legende Status:** ⬜ offen · 🔧 in Arbeit · ✅ fertig · ❌ verworfen
+> **Legende Status:** offen · in Arbeit · fertig · verworfen
 
 ---
 
@@ -17,12 +16,12 @@
 
 | Hardware-Label | Typ     | Data1 | Funktion             | FL API / Logik                                    | Status |
 |:---            |:---     |:---   |:---                  |:---                                               |:---    |
-| Rewind (<<)    | Note On | 91    | RewindORprevBar      | `transport.continuousMove(-1, SS_Start/Stop)` | ✅     |
-| Fast Fwd (>>)  | Note On | 92    | FastForwardORnextBar | `transport.continuousMove(1, SS_Start/Stop)` | ✅ |
-| Stop           | Note On | 93    | Stop                 | `transport.stop`                                  | ✅     |
-| Play           | Note On | 94    | Start                | `transport.start`                                 | ✅     |
-| Record         | Note On | 95    | Record               | `transport.record`                                | ✅     |
-| Loop           | Note On | 86    | Loop                 | `transport.globalTransport(FPT_LoopRecord)`       | ✅     |
+| Rewind (<<)    | Note On | 91    | Continuous rewind    | `transport.continuousMove(-1, SS_Start/Stop)`      | fertig |
+| Fast Fwd (>>)  | Note On | 92    | Continuous FF        | `transport.continuousMove(1, SS_Start/Stop)`       | fertig |
+| Stop           | Note On | 93    | Stop                 | `transport.stop`                                  | fertig |
+| Play           | Note On | 94    | Start                | `transport.start`                                 | fertig |
+| Record         | Note On | 95    | Record               | `transport.record`                                | fertig |
+| Loop           | Note On | 86    | Loop record toggle   | `transport.globalTransport(FPT_LoopRecord)`       | fertig |
 
 ---
 
@@ -30,11 +29,11 @@
 
 | Hardware-Label | Typ     | Data1 | Funktion        | FL API / Logik                          | Status |
 |:---            |:---     |:---   |:---             |:---                                     |:---    |
-| Record (Reihe 1) | Note On | 0  | SnapToggle      | `ui.snapOnOff`                          | ✅     |
-| Solo           | Note On | 8     | NewPattern      | `patterns.findFirstNextEmptyPat`        | ✅     |
-| Mute           | Note On | 16    | FocusMixer      | `ui.showWindow(widMixer)`               | ✅     |
-| Read           | Note On | 74    | TapTempo        | `transport.globalTransport(FPT_TapTempo)` | ✅   |
-| Write          | Note On | 75    | Undo/Cut        | Short=`general.undoUp` Long=`ui.cut`      | ✅     |
+| Record (Reihe 1) | Note On | 0  | SnapToggle      | `ui.snapOnOff`                          | fertig |
+| Solo           | Note On | 8     | NewPattern      | `patterns.findFirstNextEmptyPat`        | fertig |
+| Mute           | Note On | 16    | FocusMixer      | `ui.showWindow(widMixer)`               | fertig |
+| Read           | Note On | 74    | TapTempo        | `transport.globalTransport(FPT_TapTempo)` | fertig |
+| Write          | Note On | 75    | Undo/Cut        | Short=`general.undoUp` Long=`ui.cut`      | fertig |
 
 ---
 
@@ -42,11 +41,13 @@
 
 | Hardware-Label | Typ     | Data1 | Funktion            | FL API / Logik                                     | Status |
 |:---            |:---     |:---   |:---                 |:---                                                |:---    |
-| Save           | Note On | 80    | ToggleBrowserCR     | `ui.showWindow` toggle (Browser/CR) | ✅ |
-| In             | Note On | 87    | TogglePadMode       | `state.pad_mode` toggle (FPC ↔ Chromatic) | ✅ |
-| Out            | Note On | 88    | ToggleOverdub       | `transport.globalTransport(FPT_Overdub)`           | ✅     |
-| Metro          | Note On | 89    | MetronomeToggle     | `transport.globalTransport(FPT_Metronome)`         | ✅     |
-| Undo           | Note On | 81    | Redo                | `general.undoDown`                                 | ✅     |
+| Save           | Note On | 80    | ToggleBrowserCR     | `ui.showWindow` toggle (Browser/CR)                 | fertig |
+| In             | Note On | 87    | TogglePadMode       | Short: Drum Map ↔ Chromatic; Long: Pad Velocity On/Off | fertig |
+| Out            | Note On | 88    | ToggleOverdub       | `transport.globalTransport(FPT_Overdub)`           | fertig |
+| Metro          | Note On | 89    | MetronomeToggle     | `transport.globalTransport(FPT_Metronome)`         | fertig |
+| Undo           | Note On | 81    | Redo                | `general.undoDown`                                 | fertig |
+| Live/Bank+Part2 | Note On | 46 | Pad bank prev       | `pad_bank_offset` (beide Pad-Modi)                   | fertig |
+| Live/Bank+Part1 | Note On | 47 | Pad bank next       | `pad_bank_offset` (beide Pad-Modi)                   | fertig |
 
 ---
 
@@ -54,44 +55,34 @@
 
 | Hardware-Label   | Typ     | Data1 | Funktion            | FL API / Logik                               | Status |
 |:---              |:---     |:---   |:---                 |:---                                          |:---    |
-| Bank Left (<)    | Note On | 98    | previousPattern     | Kontextabhängig: Pattern / Preset / Browser  | ⬜     |
-| Bank Right (>)   | Note On | 99    | nextPattern         | Kontextabhängig: Pattern / Preset / Browser  | ⬜     |
-| Jog Wheel Drehen | CC      | 60    | TrackSelectMainKnob | `ui.jog` / kontextabhängig                   | ⬜     |
-| Jog Wheel Klick  | Note On | 84    | SwitchWindow        | `ui.nextWindow` / kontextabhängig            | ⬜     |
+| Bank Left (<)    | Note On | 98    | Context bank/pattern | Plugin preset / Browser tab / Pattern        | fertig |
+| Bank Right (>)   | Note On | 99    | Context bank/pattern | Plugin preset / Browser tab / Pattern        | fertig |
+| Jog Wheel Drehen | CC      | 60    | Context navigation | Browser / Mixer track / Channel               | fertig |
+| Jog Wheel Klick  | Note On | 84    | Context action       | Open plugin / Arm track / Browser enter      | fertig |
 
 ---
 
 ## 5. Mixer — Fader (DAW Port · Pitch Bend)
 
-Fader senden Pitch Bend auf separaten MIDI-Kanälen. Touch-Sensor sendet zusätzlich Note On.
+Fader senden Pitch Bend auf Kanälen 0–8. Touch-Sensor: Notes 104–112.
 
 | Hardware-Label    | Typ        | Kanal      | Touch Note | Funktion            | FL API / Logik            | Status |
 |:---               |:---        |:---        |:---        |:---                 |:---                       |:---    |
-| Fader 1           | Pitch Bend | 1 (0xE0)  | 104        | Track 1 Volume      | `mixer.setTrackVolume`    | ⬜     |
-| Fader 2           | Pitch Bend | 2 (0xE1)  | 105        | Track 2 Volume      | `mixer.setTrackVolume`    | ⬜     |
-| Fader 3           | Pitch Bend | 3 (0xE2)  | 106        | Track 3 Volume      | `mixer.setTrackVolume`    | ⬜     |
-| Fader 4           | Pitch Bend | 4 (0xE3)  | 107        | Track 4 Volume      | `mixer.setTrackVolume`    | ⬜     |
-| Fader 5           | Pitch Bend | 5 (0xE4)  | 108        | Track 5 Volume      | `mixer.setTrackVolume`    | ⬜     |
-| Fader 6           | Pitch Bend | 6 (0xE5)  | 109        | Track 6 Volume      | `mixer.setTrackVolume`    | ⬜     |
-| Fader 7           | Pitch Bend | 7 (0xE6)  | 110        | Track 7 Volume      | `mixer.setTrackVolume`    | ⬜     |
-| Fader 8           | Pitch Bend | 8 (0xE7)  | 111        | Track 8 Volume      | `mixer.setTrackVolume`    | ⬜     |
-| Fader 9 (Master)  | Pitch Bend | 9 (0xE8)  | 112        | Master Volume       | `mixer.setTrackVolume(0)` | ⬜     |
+| Fader 1–8         | Pitch Bend | 0–7       | 104–111    | Vol (Mixer/CR)      | `mixer` / `channels` + bank | fertig |
+| Fader 9 (Master)  | Pitch Bend | 8         | 112        | Master Volume       | `mixer.setTrackVolume(0)` | fertig |
+
+Mixer vs Channel Rack: auto via `ui.getFocused(widMixer)`. Soft pickup + jitter filter in `keylab_mixer.py`.
 
 ---
 
-## 6. Mixer — Encoder (DAW Port · CC · Relativ: Rechts=1, Links=65)
+## 6. Mixer — Encoder (DAW Port · CC · Relativ)
 
 | Hardware-Label | Typ | Data1 | Funktion         | FL API / Logik         | Status |
 |:---            |:--- |:---   |:---              |:---                    |:---    |
-| Encoder 1      | CC  | 16    | Track 1 Pan      | `mixer.setTrackPan`    | ⬜     |
-| Encoder 2      | CC  | 17    | Track 2 Pan      | `mixer.setTrackPan`    | ⬜     |
-| Encoder 3      | CC  | 18    | Track 3 Pan      | `mixer.setTrackPan`    | ⬜     |
-| Encoder 4      | CC  | 19    | Track 4 Pan      | `mixer.setTrackPan`    | ⬜     |
-| Encoder 5      | CC  | 20    | Track 5 Pan      | `mixer.setTrackPan`    | ⬜     |
-| Encoder 6      | CC  | 21    | Track 6 Pan      | `mixer.setTrackPan`    | ⬜     |
-| Encoder 7      | CC  | 22    | Track 7 Pan      | `mixer.setTrackPan`    | ⬜     |
-| Encoder 8      | CC  | 23    | Track 8 Pan      | `mixer.setTrackPan`    | ⬜     |
-| Encoder 9      | CC  | 24    | Master Pan       | `mixer.setTrackPan(0)` | ⬜     |
+| Encoder 1–8    | CC  | 16–23 | Pan (relativ)    | `mixer` / `channels`   | fertig |
+| Encoder 9      | CC  | 24    | Master Pan       | `mixer.setTrackPan(0)` | fertig |
+
+Plugin-Mode: Encoder 1–8 → `keylab_plugin.py`. Free Mode: virtuelle Absolute-CCs.
 
 ---
 
@@ -99,15 +90,10 @@ Fader senden Pitch Bend auf separaten MIDI-Kanälen. Touch-Sensor sendet zusätz
 
 | Hardware-Label | Typ     | Data1 | Funktion        | FL API / Logik            | Status |
 |:---            |:---     |:---   |:---             |:---                       |:---    |
-| Button 1       | Note On | 24    | Select Track 1  | `mixer.setTrackNumber`    | ⬜     |
-| Button 2       | Note On | 25    | Select Track 2  | `mixer.setTrackNumber`    | ⬜     |
-| Button 3       | Note On | 26    | Select Track 3  | `mixer.setTrackNumber`    | ⬜     |
-| Button 4       | Note On | 27    | Select Track 4  | `mixer.setTrackNumber`    | ⬜     |
-| Button 5       | Note On | 28    | Select Track 5  | `mixer.setTrackNumber`    | ⬜     |
-| Button 6       | Note On | 29    | Select Track 6  | `mixer.setTrackNumber`    | ⬜     |
-| Button 7       | Note On | 30    | Select Track 7  | `mixer.setTrackNumber`    | ⬜     |
-| Button 8       | Note On | 31    | Select Track 8  | `mixer.setTrackNumber`    | ⬜     |
-| Button 9       | Note On | 32    | Select Track 9  | `mixer.setTrackNumber`    | ⬜     |
+| Button 1–8     | Note On | 24–31 | Short=Mute Long=Solo/Pan reset | kontextabhängig | fertig |
+| Button 9       | Note On | 32    | Wie 1–8 (Master-Slot)        | kontextabhängig | fertig |
+
+*Hinweis:* Verhalten weicht von alter Doku ab (Select per Short Press war geplant, Code: Short=Mute).
 
 ---
 
@@ -115,18 +101,20 @@ Fader senden Pitch Bend auf separaten MIDI-Kanälen. Touch-Sensor sendet zusätz
 
 | Hardware-Label  | Typ     | Data1 | Funktion      | Logik               | Status |
 |:---             |:---     |:---   |:---           |:---                 |:---    |
-| Part 2 / Prev   | Note On | 48    | Bank Previous | `bank_offset -= 8`  | ⬜     |
-| Part 1 / Next   | Note On | 49    | Bank Next     | `bank_offset += 8`  | ⬜     |
+| Part 2 / Prev   | Note On | 48    | Bank -1 / Free Mode toggle (long) | `bank_offset`, `free_mode` | fertig |
+| Part 1 / Next   | Note On | 49    | Bank +1       | `bank_offset += 1`  | fertig |
 
 ---
 
-## 9. Pads (Keys Port · Kanal 10 · Note On + Poly Aftertouch)
+## 9. Pads (Keys Port · Kanal 10 raw → transponiert in Forward-Script)
 
-| Hardware-Label | Typ     | Data1 Bereich | Funktion                     | Status |
-|:---            |:---     |:---           |:---                          |:---    |
-| Pad 1–16       | Note On | 36–51         | FPC/Drum-Modus: FPC-Layout   | ⬜     |
-| Pad 1–16       | Note On | 36–51         | Chromatic-Modus: ab C3 (48)  | ⬜     |
-| Pad 1–16       | Note On | 36–51         | Sequencer-Modus: Step-Grid   | ⬜     |
+| Hardware-Label | Typ     | Native Notes | Funktion                     | Status |
+|:---            |:---     |:---          |:---                          |:---    |
+| Pad 1–16       | Note On | 36–51 phys.  | **Chromatic:** C3+ Halbtöne, **Kanal 1** | in Arbeit |
+| Pad 1–16       | Note On | 36–51 phys.  | **Drum Map:** GM Drum-Map, **Kanal 10**   | fertig |
+| Pad bank       | DAW 46/47 | —         | ±1 Bank (×16 Halbtöne)       | fertig |
+
+**Pad-Mode-Bug:** LCD-Toggle ohne hörbarer Wechsel — siehe `ROADMAP.md` Phase 10.1.
 
 ---
 
@@ -134,8 +122,8 @@ Fader senden Pitch Bend auf separaten MIDI-Kanälen. Touch-Sensor sendet zusätz
 
 | Hardware-Label   | Typ        | Data1 | Funktion           | Status |
 |:---              |:---        |:---   |:---                |:---    |
-| Pitch Bend Rad   | Pitch Bend | —     | Standard Pitch Bend | ⬜    |
-| Mod Wheel        | CC         | 1     | Standard Modulation | ⬜    |
+| Pitch Bend Rad   | Pitch Bend | 80    | Standard (passthrough) | offen |
+| Mod Wheel        | CC         | 1     | Standard (passthrough) | offen |
 
 ---
 
@@ -143,11 +131,9 @@ Fader senden Pitch Bend auf separaten MIDI-Kanälen. Touch-Sensor sendet zusätz
 
 | Hardware-Label    | Typ | Data1 (CC) | Funktion           | Status |
 |:---               |:--- |:---        |:---                |:---    |
-| Sustain Pedal     | CC  | 64         | Standard Sustain   | ⬜     |
-| Expression Pedal  | CC  | 11         | Expression         | ⬜     |
-| Aux 1 Pedal       | CC  | 12         | (TBD)              | ⬜     |
-| Aux 2 Pedal       | CC  | 13         | (TBD)              | ⬜     |
-| Aux 3 Pedal       | CC  | 14         | (TBD)              | ⬜     |
+| Sustain Pedal     | CC  | 64         | Standard Sustain   | offen |
+| Expression Pedal  | CC  | 11         | Expression         | offen |
+| Aux 1–3           | CC  | 12–14      | (TBD)              | offen |
 
 ---
 
@@ -155,21 +141,15 @@ Fader senden Pitch Bend auf separaten MIDI-Kanälen. Touch-Sensor sendet zusätz
 
 | Modus           | Auslöser                          | Beschreibung                                |
 |:---             |:---                               |:---                                         |
-| Mixer Mode      | Auto (Mixer fokussiert)           | Fader/Encoder → Mixer Track Vol/Pan         |
-| Channel Mode    | Auto (Channel Rack fokussiert)    | Fader/Encoder → Channel Rack Vol/Pan        |
-| Free Mode       | Long Press Save (Note 80)         | Fader/Encoder → `event.handled = False` (Link to controller) |
-| Pad FPC/Drum    | TogglePadMode (Note 87)           | Pads → FPC Standard-Layout                  |
-| Pad Chromatic   | TogglePadMode (Note 87)           | Pads → chromatisch ab C3                    |
-| Sequencer Mode  | (TBD — aktuell nicht belegt)      | Pads → Step-Sequencer Grid                  |
-
-### Track-Button-Modi
-
-| Aktion       | Auslöser                  | FL API                     |
-|:---          |:---                       |:---                        |
-| Select Track | Short Press (Track Btn)   | `mixer.setTrackNumber`     |
-| Solo Track   | Long Press (Track Btn)    | `mixer.soloTrack`          |
-| Mute Track   | Double-Click (Track Btn)  | `mixer.muteTrack`          |
+| Mixer Mode      | Auto (`widMixer` fokussiert)      | Fader/Encoder → Mixer-Tracks + `bank_offset` |
+| Channel Mode    | Auto (Channel Rack fokussiert)    | Fader/Encoder → Channel-Vol/Pan             |
+| Plugin Mode     | Auto (`widPlugin` fokussiert)     | Encoder 1–8 → `plugin_database`             |
+| Free Mode       | Long Press Bank Prev (≥0,75 s)    | Fader/Encoder 1–8 passthrough               |
+| Pad Chromatic   | IN (Note 87), Default             | Halbtöne ab C3, Keys Port → Ch **1**          |
+| Pad Drum Map    | IN short (Note 87)                | GM Drum-Map, Keys Port → Ch **10**            |
+| Pad Velocity    | IN long (≥0,75 s, Note 87)         | Off = feste Velocity 95 (75%) auf Pad Note-On |
+| Sequencer Mode  | (TBD)                             | Nicht implementiert                         |
 
 ---
 
-*Quellen: [`hardware_map.md`](hardware_map.md) · [`FL_Studio_API_Reference.md`](FL_Studio_API_Reference.md) · [`_archive/CONTROLLER_OVERVIEW.md`](_archive/CONTROLLER_OVERVIEW.md) (historisch)*
+*Quellen: [`hardware_map.md`](hardware_map.md) · [`FL_Studio_API_Reference.md`](FL_Studio_API_Reference.md) · [`codemaps/CODEMAP_INDEX.md`](codemaps/CODEMAP_INDEX.md)*

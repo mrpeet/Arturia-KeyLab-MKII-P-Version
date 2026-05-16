@@ -26,12 +26,21 @@ class KeyLabPagedDisplay:
         # Last timestamp in milliseconds in which the text was updated.
         self._last_update_ms = 0
 
+    def _visible_page(self):
+        """Which page name is currently shown (ephemeral overlays active base page)."""
+        now = KeyLabDisplay.time_ms()
+        if self._ephemeral_page is not None and now < self._page_expiration_time_ms:
+            return self._ephemeral_page
+        return self._active_page
+
     def SetPageLines(self, page_name, line1=None, line2=None):
         if line1 is not None:
             self._line1[page_name] = lambda: line1
         if line2 is not None:
             self._line2[page_name] = lambda: line2
-        if self._active_page == page_name:
+        # Refresh hardware when updating the page that is *currently* visible
+        # (not only _active_page — ephemeral hints must redraw too).
+        if page_name == self._visible_page():
             self._update_display(False)
 
     def SetActivePage(self, page_name, expires=None):
@@ -42,6 +51,9 @@ class KeyLabPagedDisplay:
             self._page_expiration_time_ms = KeyLabDisplay.time_ms() + expires
         else:
             self._active_page = page_name
+            # Clear overlay so persistent page is visible (OnInit: welcome -> main)
+            self._ephemeral_page = None
+            self._page_expiration_time_ms = 0
         self._update_display(reset_scroll)
 
     def display(self):
@@ -53,7 +65,8 @@ class KeyLabPagedDisplay:
             self._display.ResetScroll()
 
         self._last_update_ms = KeyLabDisplay.time_ms()
-        if self._last_update_ms < self._page_expiration_time_ms:
+        now = self._last_update_ms
+        if self._ephemeral_page is not None and now < self._page_expiration_time_ms:
             active_page = self._ephemeral_page
 
         if active_page is not None:

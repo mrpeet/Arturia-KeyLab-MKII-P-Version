@@ -7,6 +7,16 @@ import time
 from keylab_dispatch import send_to_device
 
 
+def _lcd_safe_line(s, max_len=256):
+    """LCD expects ASCII; FL names may contain umlauts etc."""
+    if s is None:
+        return ' '
+    t = str(s).encode('ascii', errors='replace').decode('ascii')
+    if len(t) > max_len:
+        return t[:max_len]
+    return t
+
+
 class KeyLabDisplay:
     """ Manages scrolling display of two lines so that long strings can be scrolled on each line. """
     def __init__(self):
@@ -46,7 +56,7 @@ class KeyLabDisplay:
         line_src = self._line1
         if self._expiration_time_ms > self.time_ms():
             line_src = self._ephemeral_line1
-        return bytearray(line_src[start_pos:end_pos], 'ascii')
+        return bytearray(_lcd_safe_line(line_src[start_pos:end_pos]), 'ascii')
 
     def _get_line2_bytes(self):
         # Get up to 16-bytes the exact chars to display for line 2.
@@ -55,7 +65,7 @@ class KeyLabDisplay:
         line_src = self._line2
         if self._expiration_time_ms > self.time_ms():
             line_src = self._ephemeral_line2
-        return bytearray(line_src[start_pos:end_pos], 'ascii')
+        return bytearray(_lcd_safe_line(line_src[start_pos:end_pos]), 'ascii')
 
     def _get_new_offset(self, start_pos, line_src):
         end_pos = start_pos + 16
@@ -101,16 +111,18 @@ class KeyLabDisplay:
             interval is provided, lines are interpreted as a blank line if not provided.
         """
         if expires is None:
+            # Paged display always uses persistent lines; drop stale device-level ephemeral window
+            self._expiration_time_ms = 0
             if line1 is not None:
-                self._line1 = line1
+                self._line1 = _lcd_safe_line(line1)
             if line2 is not None:
-                self._line2 = line2
+                self._line2 = _lcd_safe_line(line2)
         else:
             self._expiration_time_ms = self.time_ms() + expires
             if line1 is not None:
-                self._ephemeral_line1 = line1
+                self._ephemeral_line1 = _lcd_safe_line(line1)
             if line2 is not None:
-                self._ephemeral_line2 = line2
+                self._ephemeral_line2 = _lcd_safe_line(line2)
 
         self._refresh_display()
         return self

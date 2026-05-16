@@ -124,6 +124,8 @@ Syntax: **`module.functionName(arguments)`** — function names use **lower came
 
 `patternNumber`, `patternCount`, `patternMax`, `getPatternName` / `setPatternName`, `getPatternColor` / `setPatternColor`, `getPatternLength` / `setPatternLength`, `incrementPatternLength`, `getBlockSetStatus`, `ensureValidNoteRecord`, `jumpToPattern`, `findFirstNextEmptyPat`, picker helpers (`isPatternSelected`, `selectPattern`, `clonePattern`, `movePattern`, …), `burnLoop`, pattern group APIs (`getActivePatternGroup`, …)
 
+**`findFirstNextEmptyPat(flags)` — flags:** Image-Line has renamed no-prompt flags across builds (`FFNEP_DontPrompt`, `FFNEP_DontPromptName`, …). This repo resolves them with `hasattr(midi, name)` in `keylab_daw_commands._resolve_ffnep_no_prompt_flag()`.
+
 ### `arrangement` (core)
 
 `jumpToMarker`, `getMarkerName`, `addAutoTimeMarker`, `liveSelection`, `liveSelectionStart`, `currentTime`, `currentTimeHint`, `selectionStart`, `selectionEnd`
@@ -138,11 +140,11 @@ Syntax: **`module.functionName(arguments)`** — function names use **lower came
 
 ### `plugins` (core)
 
-`isValid`, `getPluginName`, `getParamCount`, `getParamName`, `getParamValue` / `setParamValue`, `getParamValueString`, `getColor`, `getName`, `getPadInfo`, `getPresetCount`, `nextPreset`, `prevPreset`
+`isValid`, `getPluginName`, `getParamCount`, `getParamName`, `getParamValue` / `setParamValue`, `getParamValueString`, `getColor`, **`getName(channel)`** (preset/bank title string after `nextPreset`/`prevPreset`), `getPadInfo`, `getPresetCount`, `nextPreset`, `prevPreset`
 
 ### `general` (core)
 
-`saveUndo`, `undo`, `undoUp`, `undoDown`, `undoUpDown`, `restoreUndoLevel`, undo history getters/setters, `getRecPPB`, `getRecPPQ` / `setRecPPQ`, `setNumerator` / `setDenominator`, `getUseMetronome`, `getPrecount`, `getChangedFlag`, `getVersion`, `dumpScoreLog`, `clearLog`, `safeToEdit`, `getProjectTitle` / `getProjectAuthor` / `getProjectGenre`
+`saveUndo`, `undo`, **`undoUp`** (undo step up — used for Undo button), **`undoDown`** (redo step — used for Redo button), `undoUpDown`, `restoreUndoLevel`, undo history getters/setters, `getRecPPB`, `getRecPPQ` / `setRecPPQ`, `setNumerator` / `setDenominator`, `getUseMetronome`, `getPrecount`, `getChangedFlag`, `getVersion`, `dumpScoreLog`, `clearLog`, `safeToEdit`, `getProjectTitle` / `getProjectAuthor` / `getProjectGenre`
 
 *Deprecation note (manual):* `processRECEvent` marked deprecated in newer API versions — prefer module-specific setters where possible.
 
@@ -156,7 +158,7 @@ Syntax: **`module.functionName(arguments)`** — function names use **lower came
 - **Navigation / edit:** `previous`, `next`, `up` / `down` / `left` / `right`, `horZoom`, `verZoom`, `snapOnOff`, `cut`, `copy`, `paste`, `insert`, `delete`, `enter`, `escape`, `yes`, `no`
 - **Hints:** `getHintMsg`, `setHintMsg`, `getHintValue`, `getTimeDispMin`, `setTimeDispMin`
 - **Windows:** `getVisible`, `showWindow`, `hideWindow`, `getFocused`, `setFocused`, `getFocusedFormCaption`, `getFocusedFormID`, `getFocusedPluginName`, `scrollWindow`, `nextWindow`, `selectWindow`, `launchAudioEditor`, `openEventEditor`, `showPicker`
-- **Menus / helpers:** `isInPopupMenu`, `closeActivePopupMenu`, `isClosing`, metronome / precount / loop-rec getters, `getSnapMode` / `setSnapMode` / `snapMode`, `getStepEditMode` / `setStepEditMode`, `getProgTitle`, `getVersion`, `crDisplayRect`, `miDisplayRect`, `miDisplayDockRect`
+- **Menus / helpers:** `isInPopupMenu`, `closeActivePopupMenu`, `isClosing`, **`isMetronomeEnabled()`**, **`isLoopRecEnabled()`** (loop *record* UI — not the same as song/pattern loop mode), `getSnapMode` / `setSnapMode` / `snapMode` (return type may be a snap *mode* index, not a strict bool — do not assume `if getSnapMode()` equals “on” on all FL versions), `getStepEditMode` / `setStepEditMode`, `getProgTitle`, `getVersion`, `crDisplayRect`, `miDisplayRect`, `miDisplayDockRect`
 - **Browser:** `navigateBrowser`, `toggleBrowserNode`, `navigateBrowserTabs`, `selectBrowserMenuItem`, `previewBrowserMenuItem`, `getFocusedNodeFileType`, `getFocusedNodeCaption`, `isBrowserAutoHide`, `setBrowserAutoHide`
 
 ---
@@ -164,6 +166,8 @@ Syntax: **`module.functionName(arguments)`** — function names use **lower came
 ## `eventData` (MIDI callback argument)
 
 Writable / readable fields include: `handled`, `status`, `data1`, `data2`, `note`, `velocity`, `pressure`, `progNum`, `controlNum`, `controlVal`, `pitchBend`, `sysex`, `isIncrement`, `res`, `inEv`, `outEv`, `midiId`, `midiChan`, `midiChanEx`, `pmeflags`, `timestamp`, `port`, … (see manual table).
+
+**Routing tip:** Handlers in this repo often branch on **`event.midiId`** (status nybble) *or* **`event.status`** (full status byte including channel). Pad logic in `device_KeyLabmkII_Forward.py` uses `event.status` (e.g. `0x99` = Note On channel 10). You can rewrite `event.status` and `event.midiChan` to move notes to another MIDI channel (e.g. melodic channel 1 instead of GM drum channel 10).
 
 ---
 
@@ -189,7 +193,15 @@ Examples: `REC_UpdateValue`, `REC_GetValue`, `REC_ShowHint`, `REC_UpdateControl`
 
 ### Global transport (`FPT_*`, `GT_*`, `SS_*`)
 
-Used with `transport.globalTransport` / `ui` navigation helpers — e.g. `FPT_Play`, `FPT_Stop`, `FPT_Record`, `FPT_Rewind`, `FPT_FastForward`, `FPT_Metronome`, `FPT_Overdub`, `GT_All`, `SS_Start`, `SS_Stop`, `PME_System`, `PME_FromMIDI`, …
+Used with `transport.globalTransport` / `ui` navigation helpers — e.g. `FPT_Play`, `FPT_Stop`, `FPT_Record`, `FPT_Rewind`, `FPT_FastForward`, **`FPT_Metronome`**, **`FPT_Overdub`**, **`FPT_TapTempo`**, **`FPT_LoopRecord`**, `GT_All`, **`SS_Start`**, **`SS_Stop`** (with `transport.continuousMove` for rewind/FF hold), `PME_System`, `PME_FromMIDI`, …
+
+### Loop / record indicators (do not mix these up)
+
+| API | Meaning in this project |
+|-----|-------------------------|
+| `transport.globalTransport(midi.FPT_LoopRecord, …)` | Toggle loop-*record* / pattern record behavior |
+| `transport.getLoopMode()` | Song vs pattern loop mode (transport hint text) |
+| `ui.isLoopRecEnabled()` | Loop-record button state (transport LED in `keylab_feedback.py`) |
 
 ### FL window IDs
 
@@ -198,6 +210,15 @@ Used with `transport.globalTransport` / `ui` navigation helpers — e.g. `FPT_Pl
 ### Other common enums
 
 Live block / clip flags (`LB_*`, `TLC_*`), channel types (`CT_*`), snap modes (`Snap_*`), pickup modes (`PIM_*`), step params (`pPitch`, `pVelocity`, …), browser node types (`SBN_*`), undo flags (`UF_*`).
+
+---
+
+## Multiple device scripts (this repo)
+
+- **DAW port:** `device_KeyLabmkII.py` — transport, mixer, DAW buttons, display.
+- **Keys port:** `device_KeyLabmkII_Forward.py` — pad transposition, optional V-Collection `device.forwardMIDICC`.
+- **Shared pad state:** `keylab_shared_state.py` uses `sys` plus `keylab_pad_state.json` in the hardware folder when FL isolates script namespaces.
+- Optional header: `# receiveFrom=...` for `device.dispatch()` between scripts (not used for pad mode currently).
 
 ---
 

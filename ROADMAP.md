@@ -155,26 +155,54 @@
 **Testbar:** Plugin öffnen → Encoder steuern die richtigen Parameter, LCD zeigt Plugin-Name.
 
 
-## Phase 10.1 Testing / Bugfixing
-encoder verhalten in allen bereichen testen und korrigieren ⬜
-fader verhalten in allen bereichen testen und korrigieren ⬜
-track buttons verhalten in allen bereichen testen und korrigieren ⬜
+## Phase 10.1 — Foundation Sync / Stabilisierung 🔧
+
+**Ziel:** Doku/Codemaps an die aktive `keylab_*`-Architektur anbinden, klare Basis-Bugs beheben, Pad-Mode-Toggle zum Laufen bringen.
+
+| Aufgabe | Datei | Status |
+|:--------|:------|:-------|
+| Roadmap + `IMPLEMENTATION_MAP.md` auf Code-Stand | `ROADMAP.md`, `IMPLEMENTATION_MAP.md` | 🔧 |
+| Codemaps + `FL_Studio_API_Reference.md` ergänzen | `codemaps/*`, `FL_Studio_API_Reference.md` | 🔧 |
+| `_sync_mixer_bank`: fehlender `mixer`-Import | `device_KeyLabmkII.py` | 🔧 |
+| Free-Mode-Fader-Jitter, Bank-Limit, Debug-Spam | `keylab_mixer.py` | 🔧 |
+| Plugin-Focus: `midi.widPlugin`, Jog-Richtung | `keylab_plugin.py` | 🔧 |
+| Pad-Mode IN ↔ Forward-Script (siehe unten) | `keylab_shared_state.py`, `device_KeyLabmkII_Forward.py` | 🔧 |
+| Encoder/Fader/Track-Buttons in allen Kontexten testen | manuell in FL Studio | ⬜ |
+
+### Bekanntes Problem: Pad-Mode-Toggle (Priorität)
+
+**Symptom (historisch):** IN-Button (Global Control, Note 87) zeigte auf dem LCD den Wechsel zwischen **Chromatic** und **Drum Map**, aber die 16 Pads blieben hörbar im **GM-Drum-Layout**.
+
+**Soll-Verhalten:**
+
+| Modus | Default | Mapping |
+|:------|:--------|:--------|
+| **Chromatic** | ja | Halbtöne ab **C3 (MIDI 48)** auf Pads 1–16 (Lesereihenfolge oben-links → unten-rechts), inkl. Pad-Bank (+16 Halbtöne) |
+| **Drum Map** (`fpc`) | nein | Native Pad-Noten → **GM Drum-Layout** (`_FPC_MAP`), Kanal 10 |
+
+**Umschalten:** IN kurz = Pad-Modus; IN lang (≥0,75 s, Aktion bei Schwelle) = Pad-Velocity → `keylab_shared_state` / `keylab_long_press.py`.
+
+**Technische Ursachen (vermutet / adressiert in 10.1):**
+
+1. **Cross-Script-State:** DAW-Script (Port 1) und Forward-Script (Port 0) teilen sich `pad_mode` über `keylab_shared_state` (`sys` + Datei-Fallback).
+2. **MIDI-Kanal 10 = GM Drums:** Chromatic-Noten auf Kanal 10 klingen weiterhin wie Percussion — Chromatic muss auf **Kanal 1** ausgegeben werden; Drum Map bleibt auf **Kanal 10**.
+3. **Forward-Script** muss in FL MIDI Settings auf dem **Keys Port** aktiv sein (`device_KeyLabmkII_Forward.py`).
+
+**Noch offen nach 10.1:** Pad-LED-Farben pro Modus/Bank, Step-Sequencer. Velocity-Toggle (Long Press IN) ist implementiert.
+
 ---
 
-## Phase 11 — Pads ⬜
+## Phase 11 — Pads (Erweiterung) ⬜
 
-**Ziel:** Pads in 2–3 Modi nutzbar (FPC, Chromatic, optional Step-Sequencer).
+**Ziel:** Pad-UX vervollständigen (LEDs, Velocity, optional Sequencer).
 
 | Aufgabe | Datei |
 |:--------|:------|
-| FPC-Modus: Standard-Drum-Layout | `keylab_pads.py` (neu) |
-| Chromatic-Modus: ab C3 aufwärts | `keylab_pads.py` |
-| Pad-Mode-Toggle (In-Button = Note 87) | `keylab_pads.py` |
-| Velocity-Toggle (Long Press In-Button) | `keylab_pads.py` |
-| Pad LED-Farben (SysEx) | `keylab_feedback.py` |
-| Step-Sequencer-Modus (optional, Phase 12+) | TBD |
+| Pad-LED-Farben / Bank-Feedback | `keylab_feedback.py` |
+| Velocity-Toggle (Long Press IN) | `keylab_daw_commands.py`, Forward | fertig |
+| Step-Sequencer-Modus (optional) | TBD |
 
-**Testbar:** Pads spielen FPC-Drums / chromatische Noten, Mode-Toggle funktioniert.
+**Testbar:** Chromatic = Melodie auf Kanal 1; Drum Map = GM-Drums auf Kanal 10; IN kurz = Modus; IN lang = Velocity; LCD-Hints.
 
 ---
 
@@ -224,9 +252,10 @@ track buttons verhalten in allen bereichen testen und korrigieren ⬜
 | `keylab_navigation.py` | Jog/Bank/Window | 7 |
 | `keylab_mixer.py` | Fader/Encoder/Buttons/Banking | 8, 9 |
 | `keylab_plugin.py` | Plugin-Encoder-Steuerung | 10 |
-| `keylab_pads.py` | Pad-Modi (FPC/Chromatic) | 11 |
+| `keylab_shared_state.py` | Pad-Mode/Bank (cross-port) | 10.1 |
+| `device_KeyLabmkII_Forward.py` | Pad-Transposition + V-Collection | 3, 10.1 |
 | `plugin_database.py` | 309 Plugin-Mappings | 4 |
 
 ---
 
-*Letzte Aktualisierung: 2026-04-15 — Phase 9 abgeschlossen, Phase 10 als nächstes*
+*Letzte Aktualisierung: 2026-05-15 — Phase 10 abgeschlossen; Phase 10.1 Foundation + Pad-Mode-Fix in Arbeit*

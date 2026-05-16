@@ -3,6 +3,7 @@
 # All handler modules read/write state through this object.
 
 from keylab_config import Fader
+import keylab_shared_state
 
 
 class FocusMode:
@@ -35,7 +36,9 @@ class KeyLabState:
         self.bank_offset = 0  # Offset for fader/encoder/track-button bank (steps of 8)
 
         # --- Pads ---
-        self.pad_mode = PadMode.FPC
+        # pad_mode, pad_bank_offset, pad_bank_count are delegated to
+        # keylab_shared_state via @property below (cross-port sharing with
+        # device_KeyLabmkII_Forward.py which performs the actual transposition).
 
         # --- Track buttons ---
         self.track_button_mode = TrackButtonMode.SELECT
@@ -65,7 +68,54 @@ class KeyLabState:
         # Last known FL Studio volume per fader slot (0.0–1.0)
         self.fader_last_fl_value = [0.0] * Fader.COUNT
 
+        # --- Fader touch sensor (debounce noisy/stuck capacitive sensors) ---
+        self.fader_touch_pressed = [False] * Fader.COUNT
+        self.fader_last_touch_ms = [0.0] * Fader.COUNT
+
+        # --- Fader LCD hint throttle (avoid page flicker / "Fader 1" stuck) ---
+        self.fader_display_last_index = -1
+        self.fader_display_last_ms = 0.0
+        # Last line2 actually sent for fader hints (touch name vs %); throttle repeats only
+        self.fader_display_last_value_str = None
+        # Monotonic ms: last Pitch Bend that passed jitter (ghost touch after move)
+        self.fader_last_move_ms = [0.0] * Fader.COUNT
+        # Any fader moved (shared `fader` page — cross-slot ghost touch must not win)
+        self.fader_last_any_move_ms = 0.0
+        # While set, touch-name hints are blocked (value/pickup hint has priority)
+        self.fader_value_hint_until_ms = 0.0
+
         # --- Plugin mode ---
         self.plugin_mode = False       # When True, encoders 1-8 control plugin params
         self.last_plugin_name = ""     # Cache: last detected plugin name
         self.plugin_encoder_values = [0.0] * 8  # Current values for relative encoders
+
+    # ------------------------------------------------------------------
+    #  Pad state — delegated to keylab_shared_state for cross-port sharing
+    # ------------------------------------------------------------------
+    @property
+    def pad_mode(self):
+        return keylab_shared_state.get_pad_mode()
+
+    @pad_mode.setter
+    def pad_mode(self, value):
+        keylab_shared_state.set_pad_mode(value)
+
+    @property
+    def pad_bank_offset(self):
+        return keylab_shared_state.get_pad_bank_offset()
+
+    @pad_bank_offset.setter
+    def pad_bank_offset(self, value):
+        keylab_shared_state.set_pad_bank_offset(value)
+
+    @property
+    def pad_bank_count(self):
+        return keylab_shared_state.PAD_BANK_COUNT
+
+    @property
+    def pad_velocity_enabled(self):
+        return keylab_shared_state.get_pad_velocity_enabled()
+
+    @pad_velocity_enabled.setter
+    def pad_velocity_enabled(self, value):
+        keylab_shared_state.set_pad_velocity_enabled(value)

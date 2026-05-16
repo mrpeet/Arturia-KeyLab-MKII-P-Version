@@ -21,6 +21,7 @@ Zentrale Navigation für KI-Assistenz (Cursor/Antigravity). Diese Maps beschreib
 | `midi_dispatcher.md` | `MidiEventDispatcher` Klasse: Pattern für Event-Routing | Bei komplexem Dispatch oder neuen Dispatcher-Instanzen |
 | `adding_handlers.md` | Schritt-für-Schritt: Neues Handler-Modul erstellen | Wenn du einen komplett neuen Bereich hinzufügst |
 | `free_mode.md` | Free Mode Logik: Was wird durchgereicht, was blockiert | Bei Änderungen am Free Mode Verhalten |
+| `long_press.md` | `keylab_long_press.py`: 0,75 s Schwelle, OnIdle-Poll, sofortiges LCD | Bei Short/Long-Press auf Buttons |
 | `plugin_control.md` | Plugin-Modus: Encoder-Mapping, `plugin_database.py` Schema | Bei Plugin-Parameter-Mapping |
 
 ---

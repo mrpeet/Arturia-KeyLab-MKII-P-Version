@@ -149,9 +149,9 @@ if "special" in mapping:
 
 ## User-Defined Mappings
 
-`user_defined_plugin_mappings.py` erlaubt Usern, eigene Mappings hinzuzufügen ohne `plugin_database.py` zu modifizieren.
+`user_defined_plugin_mappings.py` enthält Community-Mappings im FLKey-JSON-Format.
 
-**Format**: Identisch zu `PLUGIN_DATABASE`, wird zur Laufzeit gemerged.
+**Status:** Noch **nicht** in `plugin_database.get_plugin_params()` gemerged — nur als Datenquelle dokumentiert. Bis Merge: Free Mode oder Eintrag direkt in `PLUGIN_DB`.
 
 ## Integration mit Community Plugin Spreadsheet (CPS)
 

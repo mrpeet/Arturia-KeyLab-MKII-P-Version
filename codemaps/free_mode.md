@@ -3,7 +3,7 @@
 ---
 module: keylab_mixer.py
 state_flag: state.free_mode
-toggled_by: Long Press (>1s) auf Bank Prev (Note 48)
+toggled_by: Long Press (≥0,75 s) auf Bank Prev (Note 48) via keylab_long_press.py
 ---
 
 ## Zweck
@@ -15,24 +15,21 @@ Free Mode erlaubt es dem User, die Fader, Encoder und Track Buttons 1-8 direkt a
 ## Activation / Deactivation
 
 ```python
-# In keylab_mixer.py:_do_bank()
+# In keylab_mixer.py — keylab_long_press.py
 
-_BANK_BUTTON_PRESS_TIME = 0
-_LONG_PRESS_THRESHOLD = 1.0  # seconds
+import keylab_long_press as long_press
 
 def _do_bank(event, state, pages):
-    if event.data1 == BankButton.PREV_NOTE:
-        if event.midiId == NOTE_ON_STATUS:
-            _bank_button_press_time = time.time()
-        elif event.midiId == NOTE_OFF_STATUS:
-            press_duration = time.time() - _bank_button_press_time
-            if press_duration >= _LONG_PRESS_THRESHOLD:
-                # Toggle Free Mode
-                state.free_mode = not state.free_mode
-                # Display Feedback...
-            else:
-                # Normal: Bank Prev
-                state.bank_offset = max(0, state.bank_offset - 8)
+    if event.data1 == BankButton.PART2_PREV:
+        if event.data2 > 0:
+            long_press.begin(
+                'bank_prev',
+                on_long=lambda: _toggle_free_mode(state, pages),
+                on_short=lambda: _do_bank_prev(state, pages),
+            )
+        else:
+            long_press.release('bank_prev')
+    # OnIdle: long_press.poll() fires on_long at 0.75 s
 ```
 
 ## Betroffene Controls
@@ -77,7 +74,7 @@ def handle_mixer(event, state, pages):
 
 | Kombination | Verhalten |
 |-------------|-----------|
-| Free Mode + Plugin Mode | Free Mode "gewinnt" für Slots 1-8 — sie werden durchgereicht statt Plugin-Params zu steuern |
+| Free Mode + Plugin Mode | Free Mode gewinnt: Encoder 1-8 werden **nicht** von `handle_plugin_encoder` verarbeitet (`return False` → Passthrough) |
 | Free Mode + Banking | Banking-Buttons (Prev/Next) funktionieren normal — sie sind nicht in Free Mode |
 | Free Mode + Display | Free Mode zeigt visuelles Feedback auf Display: `line1='FREE MODE', line2='Faders/Encoders pass-through'` |
 
@@ -101,8 +98,8 @@ print("### FREE MODE:", "ON" if state.free_mode else "OFF", "###")
 
 ## Testing
 
-1. **Aktivierung**: Bank Prev >1s halten → Display zeigt "FREE MODE"
+1. **Aktivierung**: Bank Prev ≥0,75 s halten → Display zeigt "FREE MODE" (bei Schwelle, vor Loslassen)
 2. **Fader Test**: Fader 1 bewegen → FL Studio Mixer Channel 1 sollte sich bewegen (nicht KeyLab Script!)
 3. **Master Test**: Master Fader bewegen → Script steuert Master Volume (FL API)
-4. **Deaktivierung**: Erneut Bank Prev >1s → Normal-Modus
-5. **Plugin Mode Kombination**: Plugin öffnen, Free Mode aktivieren → Encoder sollten Plugin steuern (nicht Plugin-Params)
+4. **Deaktivierung**: Erneut Bank Prev ≥0,75 s → Normal-Modus
+5. **Plugin Mode Kombination**: Plugin öffnen, Free Mode aktivieren → Encoder 1-8 gehen an FL (Link to Controller), nicht an Plugin-Database

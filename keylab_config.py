@@ -35,7 +35,7 @@ class TrackControl:
 # ---------------------------------------------------------------------------
 class GlobalControl:
     SAVE    = 80
-    IN      = 87   # TogglePadMode
+    IN      = 87   # Short: TogglePadMode; Long: TogglePadVelocity
     OUT     = 88   # ToggleOverdub
     METRO   = 89
     UNDO    = 81
@@ -151,6 +151,17 @@ class BankButton:
     PART1_NEXT = 49
 
     ALL_NOTES = [PART2_PREV, PART1_NEXT]
+
+
+# ---------------------------------------------------------------------------
+#  Mixer — Live/Bank Modifier Buttons (DAW Port · Note On)
+#  When Live/Bank is held, Part 2/1 send different notes for pad bank navigation
+# ---------------------------------------------------------------------------
+class LiveBankButton:
+    PREV = 46  # Live/Bank + Part 2
+    NEXT = 47  # Live/Bank + Part 1
+
+    ALL_NOTES = [PREV, NEXT]
 
 
 # ---------------------------------------------------------------------------

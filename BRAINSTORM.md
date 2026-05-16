@@ -294,3 +294,5 @@ Separates Forward-Script (`device_KeyLabmkII_Forward.py`) leitet CCs vom Keys Po
 ---
 
 *Alle API-Checks basieren auf [`FL_Studio_API_Reference.md`](FL_Studio_API_Reference.md). Hardware-Daten verifiziert gegen [`hardware_map.md`](hardware_map.md).*
+
+pad bank unterschiede durch unterschiedliche farben und 2sek anzeige (oder bis getriggert) der bank nummer durch die pads als einfaches display

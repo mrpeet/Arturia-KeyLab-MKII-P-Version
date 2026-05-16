@@ -57,18 +57,20 @@ Die Transport-Buttons senden ihre Aktionen an FL Studio und zeigen LED-Feedback.
 
 Die Utility-Buttons oben links.
 
-| Button | Kurz-Druck | Lang-Druck (>1s) |
-|:-------|:-----------|:-----------------|
-| **Save** | Snap Toggle | — |
-| **In** | Undo | Cut |
-| **Out** | Redo | — |
-| **Metro** | Metronome an/aus | — |
-| **Undo** | Tap Tempo | — |
-| **Quantize** | Overdub an/aus | — |
-| **Add Track** | New Pattern (ohne Dialog) | — |
-| **Punch** | Mixer fokussieren | — |
+| Button | Kurz-Druck | Lang-Druck (≥0,75 s) |
+|:-------|:-----------|:---------------------|
+| **Save** | Browser ↔ Channel Rack | — |
+| **In** | Pad-Modus (Chromatic / Drum Map) | Pad-Velocity ein/aus |
+| **Out** | Overdub | — |
+| **Metro** | Metronome | — |
+| **Undo** (Global) | Redo | — |
+| **Write** (Track) | Undo | Cut |
+| **Record** (Track) | Snap | — |
+| **Solo** (Track) | New Pattern | — |
+| **Mute** (Track) | Mixer fokussieren | — |
+| **Read** (Track) | Tap Tempo | — |
 
-> **Hinweis:** Long Press auf "In" führt Cut aus (nicht Undo). Kurzer Druck = Undo.
+> **Long Press:** Aktion und LCD erscheinen bei **0,75 s Haltezeit** — noch bevor du loslässt. Kurzer Druck = Aktion beim Loslassen.
 
 ---
 
@@ -150,8 +152,8 @@ Die 9 Buttons unter den Encodern:
 
 | Aktion | Funktion |
 |:-------|:---------|
-| **Kurz drücken** | Pan des Tracks/Channels auf Center (0) zurücksetzen |
-| **Lang drücken (>1s)** | Track/Channel muten / unmuten |
+| **Kurz drücken** | Track/Channel muten / unmuten |
+| **Lang drücken (≥0,75 s)** | Pan Reset (Mixer) oder Solo (Channel Rack) — LCD bei Schwelle |
 
 > Button 9 (Master) ist reserviert.
 
@@ -161,9 +163,9 @@ Die 9 Buttons unter den Encodern:
 
 Die zwei Buttons links neben den Fadern (`<` und `>`):
 
-| Button | Kurz-Druck | Lang-Druck (>1s) |
-|:-------|:-----------|:-----------------|
-| **`<` (Bank Prev)** | Bank um 8 zurück (min. 0) | **Free Mode** ein/aus |
+| Button | Kurz-Druck | Lang-Druck (≥0,75 s) |
+|:-------|:-----------|:---------------------|
+| **`<` (Bank Prev)** | Bank um 8 zurück (min. 0) | **Free Mode** ein/aus (LCD bei Schwelle) |
 | **`>` (Bank Next)** | Bank um 8 vor | — |
 
 LCD zeigt beim Bank-Wechsel: `Bank / Tracks 9-16`
@@ -211,7 +213,7 @@ Plugins mit `"special": {"jog_wheel": "preset_navigation"}` in der Datenbank nut
 
 ### Aktivieren / Deaktivieren
 
-**Long Press `<` (Bank Prev) für >1 Sekunde** → Free Mode an/aus
+**Long Press `<` (Bank Prev) für ≥0,75 Sekunden** → Free Mode an/aus (Feedback auf LCD bei Erreichen der Schwelle)
 
 LCD zeigt: `FREE MODE / Active` oder `FREE MODE / Off`
 
@@ -255,10 +257,10 @@ Das LCD zeigt kontextuell Informationen. Die Anzeigedauer variiert:
 
 *(Phase 11 — noch nicht implementiert)*
 
-Geplant:
-- **FPC-Modus:** Standard Drum-Layout für FL Studio FPC
-- **Chromatischer Modus:** Chromatische Noten ab C3
+- **Drum Map:** Standard GM-Drum-Layout (intern `fpc`)
+- **Chromatischer Modus:** Chromatische Noten ab C3 (Default)
 - **Modus-Wechsel:** In-Button (Note 87) kurz drücken
+- **Pad-Velocity:** In-Button (Note 87) lang drücken (≥0,75 s) — aus = feste 75%-Anschlagstärke (MIDI 95); LCD bei Schwelle
 
 ---
 

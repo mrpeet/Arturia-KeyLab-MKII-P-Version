@@ -21,8 +21,11 @@ from keylab_plugin import handle_plugin_special_jog
 # ---------------------------------------------------------------------------
 #  Jog Wheel CC values (relative encoding)
 # ---------------------------------------------------------------------------
-_JOG_RIGHT = 1
-_JOG_LEFT  = 65
+# KeyLab jog wheel sends relative values:
+#   1-63   = increment (right turn), speed = value (1=slow, 63=fast)
+#   64-127 = decrement (left turn), speed = value - 64 (64=slow, 127=fast)
+_JOG_RIGHT_MAX = 63
+_JOG_LEFT_BASE = 64
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +41,7 @@ def handle_navigation(event, state, pages):
     if event.midiId == CC_STATUS and event.midiChan == 0 and event.data1 == Navigation.JOG_WHEEL_CC:
         if handle_plugin_special_jog(event, state, pages):
             return True
-        _do_jog(event, pages)
+        _do_jog(event, pages, state)
         event.handled = True
         return True
 
@@ -69,9 +72,13 @@ def handle_navigation(event, state, pages):
 #  Jog Wheel — context-sensitive
 # ---------------------------------------------------------------------------
 
-def _do_jog(event, pages):
+def _do_jog(event, pages, state):
     """Route jog wheel to context-sensitive navigation action."""
-    direction = 1 if event.data2 == _JOG_RIGHT else -1
+    # Determine direction and speed from relative value
+    if event.data2 <= _JOG_RIGHT_MAX:
+        direction = 1  # Right
+    else:
+        direction = -1  # Left
 
     if ui.getFocused(midi.widBrowser):
         # Browser → navigate items
@@ -91,8 +98,18 @@ def _do_jog(event, pages):
     if ui.getFocused(midi.widMixer):
         # Mixer focused → select tracks
         current = mixer.trackNumber()
-        mixer.setTrackNumber(max(0, current + direction))
-        _show_hint(pages, mixer.getTrackName(mixer.trackNumber()))
+        new_track = max(0, current + direction)
+        mixer.setTrackNumber(new_track)
+        # Auto-sync bank so the selected track is visible on faders
+        if new_track > 0:
+            target_bank = (new_track - 1) // 8
+            if target_bank != state.bank_offset:
+                state.bank_offset = target_bank
+                _show_hint(pages, "Bank %d: %s" % (target_bank + 1, mixer.getTrackName(new_track)))
+            else:
+                _show_hint(pages, mixer.getTrackName(new_track))
+        else:
+            _show_hint(pages, mixer.getTrackName(new_track))
         return
 
     # Default: Channel Rack / anything else → select channels
