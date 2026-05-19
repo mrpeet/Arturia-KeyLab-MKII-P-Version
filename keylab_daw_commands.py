@@ -19,6 +19,7 @@ from keylab_config import (
 )
 import keylab_shared_state as pad_state
 import keylab_long_press as long_press
+from keylab_feedback import update_daw_command_leds
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +122,7 @@ def _do_snap_toggle(event, pages):
     """Toggle snap mode on/off."""
     ui.snapOnOff()
     _show_hint(pages, "Snap: " + ("On" if ui.getSnapMode() else "Off"))
+    update_daw_command_leds()
 
 
 def _do_new_pattern(event, pages):
@@ -178,6 +180,7 @@ def _do_toggle_pad_mode(state, pages):
     else:
         state.pad_mode = pad_state.PAD_MODE_FPC
         _show_hint(pages, "Pads: Drum Map")
+    pad_state.mark_pad_led_dirty()
     print("Pad mode -> %s (shared state + file)" % state.pad_mode)
 
 
@@ -185,7 +188,7 @@ def _do_toggle_pad_velocity(state, pages):
     """Toggle pad velocity sensitivity (off = fixed 75% MIDI velocity)."""
     state.pad_velocity_enabled = not state.pad_velocity_enabled
     label = "On" if state.pad_velocity_enabled else "Off"
-    _show_hint(pages, "Pad Velocity: " + label)
+    _show_hint(pages, "Pad Velo: " + label)
     print("Pad velocity -> %s (shared state + file)" % label)
 
 
@@ -193,12 +196,14 @@ def _do_toggle_overdub(event, pages):
     """Toggle overdub/loop record mode."""
     transport.globalTransport(midi.FPT_Overdub, 1)
     _show_hint(pages, "Overdub")
+    update_daw_command_leds()
 
 
 def _do_toggle_metronome(event, pages):
     """Toggle metronome on/off."""
     transport.globalTransport(midi.FPT_Metronome, 1)
     _show_hint(pages, "Metro: " + ("On" if ui.isMetronomeEnabled() else "Off"))
+    update_daw_command_leds()
 
 
 def _do_redo(event, pages):

@@ -11,7 +11,7 @@
 # This script runs on the Keys Port (KeyLab mkII 61) and:
 #   1. Transposes pad events (Channel 10, native notes 36-51) based on shared state
 #      from the DAW script:
-#        - Chromatic: semitones from C3 (MIDI 48), output on MIDI channel 1
+#        - Chromatic: Pad 1 = C3 (MIDI 48), +semitones per Pad.NOTES slot, channel 1
 #        - Drum Map (fpc): GM Drum layout via _FPC_MAP, output stays on MIDI channel 10
 #      Both support pad_bank_offset (0-5, +16 semitones per bank).
 #   2. Forwards CCs and Pitch Bend to Port 10 for Arturia V-Collection plugins.
@@ -30,6 +30,12 @@ import device
 import keylab_shared_state as pad_state
 
 from keylab_config import Pad
+from keylab_pad_leds import (
+    pad_index_from_note,
+    set_pad_color,
+    refresh_all_pads_idle,
+    clear_pad_leds,
+)
 
 # Debug pad transposition in FL Script Output (set False when stable)
 _DEBUG_PADS = False
@@ -43,14 +49,6 @@ _NOTE_ON_CH10 = 0x90 + Pad.PAD_CHANNEL   # 0x99
 _NOTE_OFF_CH10 = 0x80 + Pad.PAD_CHANNEL  # 0x89
 _NOTE_ON_CH1 = 0x90
 _NOTE_OFF_CH1 = 0x80
-
-# CHROMATIC_MAP: native pad note -> sequential index (0-15), top-left = lowest
-_CHROMATIC_MAP = {
-    48: 0,  49: 1,  50: 2,  51: 3,
-    44: 4,  45: 5,  46: 6,  47: 7,
-    40: 8,  41: 9,  42: 10, 43: 11,
-    36: 12, 37: 13, 38: 14, 39: 15,
-}
 
 # FPC_MAP: native pad note -> GM Drum note (channel 10)
 _FPC_MAP = {
@@ -121,7 +119,7 @@ def _transpose_pad(event):
     note_on = event.status == _NOTE_ON_CH10 and event.data2 > 0
 
     if mode == pad_state.PAD_MODE_CHROMATIC:
-        idx = _CHROMATIC_MAP.get(note)
+        idx = Pad.NOTE_TO_SLOT.get(note)
         if idx is None:
             return
         new_note = _CHROMATIC_BASE + idx + bank * 16
@@ -146,10 +144,16 @@ def _apply_pad_velocity(event, note_on_before_transpose):
 def OnInit():
     print("### INIT KeyLab mkII Forward (Port 0) ###")
     print("### Pad mode: %s (file+sys sync) ###" % pad_state.get_pad_mode())
+    refresh_all_pads_idle()
 
 
 def OnDeInit():
-    return
+    clear_pad_leds()
+
+
+def OnIdle():
+    if pad_state.consume_pad_led_dirty():
+        refresh_all_pads_idle()
 
 
 def OnMidiIn(event):
@@ -160,6 +164,12 @@ def OnMidiIn(event):
         note_on = event.status == _NOTE_ON_CH10 and event.data2 > 0
         _transpose_pad(event)
         _apply_pad_velocity(event, note_on)
+        pad_idx = pad_index_from_note(old_note)
+        if pad_idx is not None:
+            if note_on:
+                set_pad_color(pad_idx, event.data2)
+            else:
+                set_pad_color(pad_idx, 0)
         if _DEBUG_PADS:
             print("Pad: mode=%s bank=%d vel=%s ch=%d note %d->%d vel=%d status %d->%d" % (
                 pad_state.get_pad_mode(),

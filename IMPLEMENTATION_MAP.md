@@ -8,6 +8,8 @@
 > **Hinweis:** `device_KeyLabmkII_Forward.py` läuft auf dem **Keys Port** (Pads + optional V-Collection).
 > Das Hauptscript läuft auf **MIDIIN2 / DAW Port**. Beide müssen in FL MIDI Settings zugewiesen sein.
 >
+> **LED / LCD / Timing:** [`CONTROLLER_RULES.md`](CONTROLLER_RULES.md) · Implementierung `keylab_feedback.py`
+>
 > **Legende Status:** offen · in Arbeit · fertig · verworfen
 
 ---
@@ -68,8 +70,8 @@ Fader senden Pitch Bend auf Kanälen 0–8. Touch-Sensor: Notes 104–112.
 
 | Hardware-Label    | Typ        | Kanal      | Touch Note | Funktion            | FL API / Logik            | Status |
 |:---               |:---        |:---        |:---        |:---                 |:---                       |:---    |
-| Fader 1–8         | Pitch Bend | 0–7       | 104–111    | Vol (Mixer/CR)      | `mixer` / `channels` + bank | fertig |
-| Fader 9 (Master)  | Pitch Bend | 8         | 112        | Master Volume       | `mixer.setTrackVolume(0)` | fertig |
+| Fader 1–8         | Pitch Bend | 0–7       | 104–111    | Vol (Mixer/CR) + LCD dB | `mixer.getTrackVolume(t,1)` + bank | fertig |
+| Fader 9 (Master)  | Pitch Bend | 8         | 112        | Master Volume + LCD dB | `mixer.setTrackVolume(0)` | fertig |
 
 Mixer vs Channel Rack: auto via `ui.getFocused(widMixer)`. Soft pickup + jitter filter in `keylab_mixer.py`.
 
@@ -101,20 +103,21 @@ Plugin-Mode: Encoder 1–8 → `keylab_plugin.py`. Free Mode: virtuelle Absolute
 
 | Hardware-Label  | Typ     | Data1 | Funktion      | Logik               | Status |
 |:---             |:---     |:---   |:---           |:---                 |:---    |
-| Part 2 / Prev   | Note On | 48    | Bank -1 / Free Mode toggle (long) | `bank_offset`, `free_mode` | fertig |
-| Part 1 / Next   | Note On | 49    | Bank +1       | `bank_offset += 1`  | fertig |
+| Part 2 / Prev   | Note On | 48    | Bank -1 / Free Mode toggle (long) | `bank_offset`, `_max_bank_offset()` | fertig |
+| Part 1 / Next   | Note On | 49    | Bank +1 (bis letzter Insert) | `bank_offset`, Bank-Hint Tracks N–M | fertig |
 
 ---
 
 ## 9. Pads (Keys Port · Kanal 10 raw → transponiert in Forward-Script)
 
+Pad 1–16 / LED-Slot: `keylab_config.Pad.NOTES` (oben links = Pad 1 = Note 36, unten = 13–16 = 48–51).
+
 | Hardware-Label | Typ     | Native Notes | Funktion                     | Status |
 |:---            |:---     |:---          |:---                          |:---    |
-| Pad 1–16       | Note On | 36–51 phys.  | **Chromatic:** C3+ Halbtöne, **Kanal 1** | in Arbeit |
+| Pad 1–16       | Note On | 36–51 phys.  | **Chromatic:** Pad 1 = C3, +Halbtöne, **Kanal 1** | fertig |
 | Pad 1–16       | Note On | 36–51 phys.  | **Drum Map:** GM Drum-Map, **Kanal 10**   | fertig |
 | Pad bank       | DAW 46/47 | —         | ±1 Bank (×16 Halbtöne)       | fertig |
-
-**Pad-Mode-Bug:** LCD-Toggle ohne hörbarer Wechsel — siehe `ROADMAP.md` Phase 10.1.
+| Pad LEDs       | SysEx (Keys) | —      | Chromatic = weiß, Drum Map = lila        | fertig |
 
 ---
 
@@ -145,11 +148,27 @@ Plugin-Mode: Encoder 1–8 → `keylab_plugin.py`. Free Mode: virtuelle Absolute
 | Channel Mode    | Auto (Channel Rack fokussiert)    | Fader/Encoder → Channel-Vol/Pan             |
 | Plugin Mode     | Auto (`widPlugin` fokussiert)     | Encoder 1–8 → `plugin_database`             |
 | Free Mode       | Long Press Bank Prev (≥0,75 s)    | Fader/Encoder 1–8 passthrough               |
-| Pad Chromatic   | IN (Note 87), Default             | Halbtöne ab C3, Keys Port → Ch **1**          |
+| Pad Chromatic   | IN (Note 87), Default             | Pad 1 = C3 … Pad 16, Keys Port → Ch **1**     |
 | Pad Drum Map    | IN short (Note 87)                | GM Drum-Map, Keys Port → Ch **10**            |
 | Pad Velocity    | IN long (≥0,75 s, Note 87)         | Off = feste Velocity 95 (75%) auf Pad Note-On |
-| Sequencer Mode  | (TBD)                             | Nicht implementiert                         |
+| Sequencer Mode  | (TBD)                             | → Phase 13 (optional)                       |
 
 ---
 
-*Quellen: [`hardware_map.md`](hardware_map.md) · [`FL_Studio_API_Reference.md`](FL_Studio_API_Reference.md) · [`codemaps/CODEMAP_INDEX.md`](codemaps/CODEMAP_INDEX.md)*
+## 12. LED Feedback (DAW Port · SysEx)
+
+Spezifikation: [`CONTROLLER_RULES.md`](CONTROLLER_RULES.md). Code: `keylab_feedback.py`.
+
+| Bereich | Regel | Status |
+|:---|:---|:---|
+| Transport | Play/Stop/Record/Loop + Beat blink | fertig |
+| DAW Commands | Toggle 30%/100%; Save/IN/Undo/Tap immer 100% | fertig |
+| Navigation | Bank L/R, Jog click immer 100% | fertig |
+| Part Prev/Next (48/49) | immer 100% | fertig |
+| Track Buttons 24–31 | Muted off; 20% / 100% FL-Farbe | fertig |
+| Pads | Weiß / Lila nach `pad_mode` | fertig |
+| Sync | `OnInit`/`OnRefresh` → `update_all_feedback`; `OnIdle` throttled | fertig |
+
+---
+
+*Quellen: [`hardware_map.md`](hardware_map.md) · [`FL_Studio_API_Reference.md`](FL_Studio_API_Reference.md) · [`codemaps/CODEMAP_INDEX.md`](codemaps/CODEMAP_INDEX.md) · [`CONTROLLER_RULES.md`](CONTROLLER_RULES.md)*

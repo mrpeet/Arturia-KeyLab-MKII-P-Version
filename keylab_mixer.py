@@ -21,6 +21,7 @@ from keylab_config import (
     PITCH_BEND_STATUS,
 )
 import keylab_long_press as long_press
+from keylab_feedback import update_track_button_leds
 
 # handle_free_fader return codes
 FREE_FADER_NONE = 0
@@ -46,6 +47,10 @@ _FADER_VALUE_DISPLAY_MS = 500
 # FL Studio volume API: 0.8 = 100%, 1.0 = 125% (overdrive).
 # We map fader full travel to 100% (0.8) to match the hardware expectation.
 _FL_VOLUME_SCALE = 0.8
+_FADER_WRITE_EPSILON = 0.003
+_FADER_CEILING_ENTER = 0.98
+_FADER_CEILING_EXIT = 0.95
+_PLUGIN_FADER_HINT_MS = 2000
 
 
 def _pb_to_float(data1, data2):
@@ -96,9 +101,9 @@ def reset_soft_pickup_on_focus_change(state):
         current_focus = 'channel_rack'
 
     if current_focus != _last_focused_window:
-        # Focus changed - reset soft pickup and touch debounce state
         for i in range(Fader.COUNT):
             state.fader_pickup_active[i] = False
+            state.fader_at_ceiling[i] = False
             state.fader_touch_pressed[i] = False
             state.fader_last_move_ms[i] = 0.0
         state.fader_last_any_move_ms = 0.0
@@ -111,17 +116,23 @@ def reset_soft_pickup_on_focus_change(state):
 # ---------------------------------------------------------------------------
 
 def _max_bank_offset():
-    """Upper bank index so fader slots stay within mixer tracks or channels."""
+    """Highest bank index with at least one valid insert (mixer) or channel (CR)."""
     try:
         if ui.getFocused(midi.widMixer):
             count = mixer.getTrackCount()
             if count <= 1:
                 return 0
-            return max(0, (count - 2) // 8)
+            bank = 0
+            while 1 + (bank + 1) * 8 < count:
+                bank += 1
+            return bank
         ch_count = channels.channelCount()
         if ch_count <= 0:
             return 0
-        return max(0, (ch_count - 1) // 8)
+        bank = 0
+        while (bank + 1) * 8 < ch_count:
+            bank += 1
+        return bank
     except Exception:
         return 0
 
@@ -223,11 +234,13 @@ def handle_mixer(event, state, pages):
             if state.free_mode:
                 return False  # Passthrough: slot 1–8 in Free Mode (handled by handle_free_fader)
             if state.plugin_mode:
-                # Plugin focus without Free Mode: show hint that faders are disabled
-                pages.SetPageLines('fader', line1='Fader %d' % (index + 1), line2='Use Free Mode')
-                pages.SetActivePage('fader', expires=1000)
+                now_m = _touch_now_ms()
+                if now_m >= state.plugin_fader_hint_until_ms:
+                    state.plugin_fader_hint_until_ms = now_m + _PLUGIN_FADER_HINT_MS
+                    pages.SetPageLines('fader', line1='Fader %d' % (index + 1), line2='Use Free Mode')
+                    pages.SetActivePage('fader', expires=1000)
                 event.handled = True
-                return True  # Swallow the event
+                return True
         _do_fader(event, state, pages)
         event.handled = True
         return True
@@ -296,17 +309,18 @@ def _do_fader(event, state, pages):
     if abs(raw - state.fader_last_sent_value[index]) < state.FADER_JITTER_THRESHOLD:
         return
 
+    if state.fader_at_ceiling[index]:
+        if value >= _FADER_CEILING_EXIT:
+            return
+        state.fader_at_ceiling[index] = False
+
     now_m = _touch_now_ms()
     state.fader_last_move_ms[index] = now_m
     state.fader_last_any_move_ms = now_m
 
-    # --- Determine target FL value for soft pickup ---
-    # _get_current_fl_volume returns FL API scale (0.0–0.8 = 0–100%).
-    # Convert to fader scale (0.0–1.0) for comparison with incoming value.
-    fl_raw = _get_current_fl_volume(index, state)
-    if fl_raw < 0.0:
-        return  # Invalid slot
-    fl_value = fl_raw / _FL_VOLUME_SCALE  # → 0.0–1.0 fader scale
+    fl_value = _read_linear_volume(index, state)
+    if fl_value < 0.0:
+        return
 
     # --- Soft pickup ---
     if not state.fader_pickup_active[index]:
@@ -314,40 +328,67 @@ def _do_fader(event, state, pages):
         if delta < 0.05:
             state.fader_pickup_active[index] = True
         else:
-            _show_hint(pages, index, "-> %d%%" % int(fl_value * 100), state)
+            db_str = _read_volume_db(index, state)
+            if db_str:
+                _show_hint(pages, index, "-> %s" % db_str, state)
             return
 
-    # --- Apply volume ---
+    if value >= _FADER_CEILING_ENTER:
+        value = 1.0
+        state.fader_at_ceiling[index] = True
+    elif abs(value - fl_value) <= _FADER_WRITE_EPSILON:
+        state.fader_last_sent_value[index] = raw
+        return
+
     state.fader_last_sent_value[index] = raw
-    _set_fl_volume(index, value, state)
-    _show_hint(pages, index, "%d%%" % int(value * 100), state)
+    _set_fl_volume_linear(index, value, state)
+    state.fader_last_written_linear[index] = value
+    db_str = _read_volume_db(index, state)
+    if db_str:
+        _show_hint(pages, index, db_str, state)
 
 
-def _get_current_fl_volume(index, state):
-    """Return current FL Studio volume for this fader slot (0.0–1.0), or -1 on error."""
+def _read_linear_volume(index, state):
+    """FL volume as 0.0–1.0 fader scale (1.0 = 100% / API 0.8). Returns -1 if invalid."""
     try:
         if index == Fader.MASTER_CHANNEL:
-            return mixer.getTrackVolume(0)
-        if ui.getFocused(midi.widMixer):
+            api_val = mixer.getTrackVolume(0)
+        elif ui.getFocused(midi.widMixer):
             track = index + 1 + state.bank_offset * 8
             if track >= mixer.getTrackCount():
                 return -1.0
-            return mixer.getTrackVolume(track)
+            api_val = mixer.getTrackVolume(track)
         else:
             ch = index + state.bank_offset * 8
             if ch >= channels.channelCount():
                 return -1.0
-            return channels.getChannelVolume(ch)
+            api_val = channels.getChannelVolume(ch)
+        return max(0.0, min(1.0, api_val / _FL_VOLUME_SCALE))
     except Exception:
         return -1.0
 
 
-def _set_fl_volume(index, value, state):
-    """Apply volume to the correct FL Studio target.
+def _get_current_fl_volume(index, state):
+    """Return FL API volume (0.0–0.8). Kept for compatibility."""
+    linear = _read_linear_volume(index, state)
+    if linear < 0.0:
+        return -1.0
+    return linear * _FL_VOLUME_SCALE
 
-    Scales 0.0–1.0 fader range to 0.0–0.8 FL API range (0.8 = 100%).
-    """
-    fl_value = value * _FL_VOLUME_SCALE
+
+def _set_fl_volume_linear(index, linear_value, state):
+    """Apply volume; linear_value is 0.0–1.0 fader scale."""
+    fl_value = linear_value * _FL_VOLUME_SCALE
+    _set_fl_volume_api(index, fl_value, state)
+
+
+def _set_fl_volume(index, value, state):
+    """Apply volume from 0.0–1.0 fader scale."""
+    _set_fl_volume_linear(index, value, state)
+
+
+def _set_fl_volume_api(index, fl_value, state):
+    """Apply raw FL API volume (0.0–0.8 = 0–100%)."""
     if index == Fader.MASTER_CHANNEL:
         mixer.setTrackVolume(0, fl_value)
         return
@@ -399,8 +440,7 @@ def _do_fader_touch(event, state, pages):
                         < _FADER_TOUCH_LCD_SUPPRESS_AFTER_MOVE_MS)
         value_hint_active = (now_ms < state.fader_value_hint_until_ms)
         if not recent_local and not value_hint_active:
-            name = _get_slot_name(index, state)
-            _show_touch_hint(pages, index, name, state)
+            _show_touch_hint(pages, index, state)
     elif _DEBUG_FADER:
         print("Fader %d touch release (pickup unchanged)" % (index + 1))
 
@@ -418,6 +458,34 @@ def _get_slot_name(index, state):
             return channels.getChannelName(ch) if ch < channels.channelCount() else "---"
     except Exception:
         return "---"
+
+
+def _format_db_value(vol_db):
+    """Format FL dB volume for LCD (mode=1 / useDb=1 API values)."""
+    try:
+        if vol_db != vol_db or vol_db <= -100.0:
+            return "-inf dB"
+        return "%.1f dB" % vol_db
+    except Exception:
+        return None
+
+
+def _read_volume_db(index, state):
+    """Read current volume in dB from FL after set or for display."""
+    try:
+        if index == Fader.MASTER_CHANNEL:
+            return _format_db_value(mixer.getTrackVolume(0, 1))
+        if ui.getFocused(midi.widMixer):
+            track = index + 1 + state.bank_offset * 8
+            if track >= mixer.getTrackCount():
+                return None
+            return _format_db_value(mixer.getTrackVolume(track, 1))
+        ch = index + state.bank_offset * 8
+        if ch >= channels.channelCount():
+            return None
+        return _format_db_value(channels.getChannelVolume(ch, 1))
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -558,6 +626,7 @@ def _do_bank(event, state, pages):
             state.bank_offset = min(state.bank_offset + 1, _max_bank_offset())
             _show_bank_hint(state, pages)
             _reset_fader_state_after_bank_change(state)
+            update_track_button_leds(state)
 
 
 def _do_bank_prev(state, pages):
@@ -565,6 +634,7 @@ def _do_bank_prev(state, pages):
     state.bank_offset = max(0, state.bank_offset - 1)
     _show_bank_hint(state, pages)
     _reset_fader_state_after_bank_change(state)
+    update_track_button_leds(state)
 
 
 def _toggle_free_mode(state, pages):
@@ -577,17 +647,42 @@ def _toggle_free_mode(state, pages):
     pages.SetActivePage('bank', expires=1500)
 
 
-def _reset_fader_state_after_bank_change(state):
+def reset_fader_state(state):
+    """Reset pickup, ceiling, and touch state (OnInit, bank change, focus change)."""
     state.fader_pickup_active = [False] * Fader.COUNT
+    state.fader_at_ceiling = [False] * Fader.COUNT
     state.fader_touch_pressed = [False] * Fader.COUNT
     state.fader_last_move_ms = [0.0] * Fader.COUNT
     state.fader_last_any_move_ms = 0.0
     state.fader_value_hint_until_ms = 0.0
+    state.fader_last_written_linear = [0.0] * Fader.COUNT
+
+
+def _reset_fader_state_after_bank_change(state):
+    reset_fader_state(state)
 
 
 def _show_bank_hint(state, pages):
-    pages.SetPageLines('bank', line1='Bank', line2='Tracks %d-%d' % (
-        state.bank_offset * 8 + 1, state.bank_offset * 8 + 8))
+    try:
+        if ui.getFocused(midi.widMixer):
+            count = mixer.getTrackCount()
+            if count <= 1:
+                line2 = 'Master only'
+            else:
+                first = state.bank_offset * 8 + 1
+                last = min(state.bank_offset * 8 + 8, count - 1)
+                line2 = 'Tracks %d-%d' % (first, last)
+        else:
+            ch_count = channels.channelCount()
+            if ch_count <= 0:
+                line2 = 'No channels'
+            else:
+                first = state.bank_offset * 8
+                last = min(state.bank_offset * 8 + 7, ch_count - 1)
+                line2 = 'Ch %d-%d' % (first, last)
+    except Exception:
+        line2 = 'Bank'
+    pages.SetPageLines('bank', line1='Bank', line2=line2)
     pages.SetActivePage('bank', expires=1200)
 
 
@@ -651,24 +746,25 @@ def _should_throttle_fader_display(state, fader_index, value_str):
     return False
 
 
-def _show_touch_hint(pages, fader_index, name, state):
+def _show_touch_hint(pages, fader_index, state):
     """One-shot touch label (longer expiry, always updates on new press)."""
-    label = "Master" if fader_index == Fader.MASTER_CHANNEL else "Fader %d" % (fader_index + 1)
+    line1 = _get_slot_name(fader_index, state)
+    line2 = _read_volume_db(fader_index, state) or ""
     now_ms = _touch_now_ms()
     state.fader_display_last_index = fader_index
     state.fader_display_last_ms = now_ms
-    state.fader_display_last_value_str = name
-    pages.SetPageLines('fader', line1=label, line2=name)
+    state.fader_display_last_value_str = line2
+    pages.SetPageLines('fader', line1=line1, line2=line2)
     pages.SetActivePage('fader', expires=_FADER_TOUCH_DISPLAY_MS)
 
 
 def _show_hint(pages, fader_index, value_str, state):
     """Show fader value hint on LCD (throttled while moving)."""
-    # Always show soft-pickup target ("-> nn%"); throttle only repeated same % text
+    # Always show soft-pickup target ("-> … dB"); throttle only repeated same text
     if not value_str.startswith('->') and _should_throttle_fader_display(state, fader_index, value_str):
         return
-    label = "Master" if fader_index == Fader.MASTER_CHANNEL else "Fader %d" % (fader_index + 1)
-    pages.SetPageLines('fader', line1=label, line2=value_str)
+    line1 = _get_slot_name(fader_index, state)
+    pages.SetPageLines('fader', line1=line1, line2=value_str)
     pages.SetActivePage('fader', expires=_FADER_VALUE_DISPLAY_MS)
     now_m = _touch_now_ms()
     state.fader_display_last_index = fader_index

@@ -1,3 +1,4 @@
-pad_mode=fpc
+pad_mode=chromatic
 pad_bank_offset=0
-pad_velocity_enabled=1
+pad_velocity_enabled=0
+pad_led_dirty=0

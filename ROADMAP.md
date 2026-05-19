@@ -2,6 +2,8 @@
 
 > Übersicht aller Entwicklungsphasen. Jede Phase ist in sich abgeschlossen und testbar.
 >
+> **Controller-Regeln (LED, LCD, Long-Press):** [`CONTROLLER_RULES.md`](CONTROLLER_RULES.md)
+>
 > **Prinzipien:**
 > - Keine Magic Numbers — alle MIDI-Werte über `keylab_config.py`
 > - State nur über `keylab_state.py` — kein Module-Level-Mutable-State
@@ -155,67 +157,48 @@
 **Testbar:** Plugin öffnen → Encoder steuern die richtigen Parameter, LCD zeigt Plugin-Name.
 
 
-## Phase 10.1 — Foundation Sync / Stabilisierung 🔧
+## Phase 10.1 — Foundation Sync / Stabilisierung ✅
 
 **Ziel:** Doku/Codemaps an die aktive `keylab_*`-Architektur anbinden, klare Basis-Bugs beheben, Pad-Mode-Toggle zum Laufen bringen.
 
 | Aufgabe | Datei | Status |
 |:--------|:------|:-------|
-| Roadmap + `IMPLEMENTATION_MAP.md` auf Code-Stand | `ROADMAP.md`, `IMPLEMENTATION_MAP.md` | 🔧 |
-| Codemaps + `FL_Studio_API_Reference.md` ergänzen | `codemaps/*`, `FL_Studio_API_Reference.md` | 🔧 |
-| `_sync_mixer_bank`: fehlender `mixer`-Import | `device_KeyLabmkII.py` | 🔧 |
-| Free-Mode-Fader-Jitter, Bank-Limit, Debug-Spam | `keylab_mixer.py` | 🔧 |
-| Plugin-Focus: `midi.widPlugin`, Jog-Richtung | `keylab_plugin.py` | 🔧 |
-| Pad-Mode IN ↔ Forward-Script (siehe unten) | `keylab_shared_state.py`, `device_KeyLabmkII_Forward.py` | 🔧 |
-| Encoder/Fader/Track-Buttons in allen Kontexten testen | manuell in FL Studio | ⬜ |
+| Roadmap + `IMPLEMENTATION_MAP.md` auf Code-Stand | `ROADMAP.md`, `IMPLEMENTATION_MAP.md` | ✅ |
+| Codemaps + `FL_Studio_API_Reference.md` ergänzen | `codemaps/*`, `FL_Studio_API_Reference.md` | ✅ |
+| Pad-Mode IN ↔ Forward-Script | `keylab_shared_state.py`, `device_KeyLabmkII_Forward.py` | ✅ |
+| Long-Press 0,75 s + sofortiges LCD | `keylab_long_press.py` | ✅ |
+| Mixer-Bank / Fader-dB-LCD | `keylab_mixer.py` | ✅ |
+| Free-Mode, Plugin-Focus, Jog | diverse | ✅ |
 
-### Bekanntes Problem: Pad-Mode-Toggle (Priorität)
-
-**Symptom (historisch):** IN-Button (Global Control, Note 87) zeigte auf dem LCD den Wechsel zwischen **Chromatic** und **Drum Map**, aber die 16 Pads blieben hörbar im **GM-Drum-Layout**.
-
-**Soll-Verhalten:**
-
-| Modus | Default | Mapping |
-|:------|:--------|:--------|
-| **Chromatic** | ja | Halbtöne ab **C3 (MIDI 48)** auf Pads 1–16 (Lesereihenfolge oben-links → unten-rechts), inkl. Pad-Bank (+16 Halbtöne) |
-| **Drum Map** (`fpc`) | nein | Native Pad-Noten → **GM Drum-Layout** (`_FPC_MAP`), Kanal 10 |
-
-**Umschalten:** IN kurz = Pad-Modus; IN lang (≥0,75 s, Aktion bei Schwelle) = Pad-Velocity → `keylab_shared_state` / `keylab_long_press.py`.
-
-**Technische Ursachen (vermutet / adressiert in 10.1):**
-
-1. **Cross-Script-State:** DAW-Script (Port 1) und Forward-Script (Port 0) teilen sich `pad_mode` über `keylab_shared_state` (`sys` + Datei-Fallback).
-2. **MIDI-Kanal 10 = GM Drums:** Chromatic-Noten auf Kanal 10 klingen weiterhin wie Percussion — Chromatic muss auf **Kanal 1** ausgegeben werden; Drum Map bleibt auf **Kanal 10**.
-3. **Forward-Script** muss in FL MIDI Settings auf dem **Keys Port** aktiv sein (`device_KeyLabmkII_Forward.py`).
-
-**Noch offen nach 10.1:** Pad-LED-Farben pro Modus/Bank, Step-Sequencer. Velocity-Toggle (Long Press IN) ist implementiert.
+Pad-Mode-Toggle (Chromatic Kanal 1 / Drum Map Kanal 10) ist gelöst — siehe `CONTROLLER_RULES.md`.
 
 ---
 
-## Phase 11 — Pads (Erweiterung) ⬜
+## Phase 11 — Pads ✅
 
-**Ziel:** Pad-UX vervollständigen (LEDs, Velocity, optional Sequencer).
+**Ziel:** Pad-Modus, Velocity, Cross-Port-State.
 
-| Aufgabe | Datei |
-|:--------|:------|
-| Pad-LED-Farben / Bank-Feedback | `keylab_feedback.py` |
-| Velocity-Toggle (Long Press IN) | `keylab_daw_commands.py`, Forward | fertig |
-| Step-Sequencer-Modus (optional) | TBD |
-
-**Testbar:** Chromatic = Melodie auf Kanal 1; Drum Map = GM-Drums auf Kanal 10; IN kurz = Modus; IN lang = Velocity; LCD-Hints.
+| Aufgabe | Datei | Status |
+|:--------|:------|:-------|
+| Pad-Modus Chromatic / Drum Map (IN kurz) | `keylab_daw_commands.py`, Forward | ✅ |
+| Velocity-Toggle (IN lang, `Pad Velo: On/Off`) | `keylab_daw_commands.py`, Forward | ✅ |
+| Pad-LED-Farben (weiß / lila) | `keylab_feedback.py` | ✅ (Phase 12) |
+| Step-Sequencer auf Pads | — | → Phase 13 (optional) |
 
 ---
 
-## Phase 12 — LED Feedback (DAW Commands + Track Buttons) ⬜
+## Phase 12 — LED Feedback ✅
 
-**Ziel:** Buttons leuchten passend zum FL Studio State.
+**Ziel:** Kohärente LED-Logik — Spezifikation in [`CONTROLLER_RULES.md`](CONTROLLER_RULES.md).
 
-| Aufgabe | Datei |
-|:--------|:------|
-| DAW Command Buttons: aktiv=100%, inaktiv=30% | `keylab_feedback.py` |
-| Track Buttons: Mute/Solo-State als LED | `keylab_feedback.py` |
-| Snap/Metronome/Overdub: State-LED synchronisiert | `keylab_feedback.py` |
-| OnRefresh → alle LEDs neu synchronisieren | `keylab_feedback.py` |
+| Bereich | Regel | Status |
+|:--------|:------|:-------|
+| **Pads** | Chromatic = weiß, Drum Map = lila | ✅ |
+| **DAW Commands** | Toggle off=30% / on=100%; Mode/Action immer 100% | ✅ |
+| **Navigation** | Bank L/R, Jog click immer 100% | ✅ |
+| **Mixer Part 48/49** | Prev/Next immer 100% | ✅ |
+| **Track Buttons** | Muted 0%, unfocused 20%, focused 100% FL-Farbe | ✅ |
+| **OnRefresh / OnIdle** | `update_all_feedback` + throttled track LEDs | ✅ |
 
 ---
 
@@ -225,7 +208,8 @@
 
 | Aufgabe | Datei |
 |:--------|:------|
-| Alle LEDs korrekt synchronisiert (OnRefresh) | `keylab_feedback.py` |
+| Step-Sequencer auf Pads (optional) | TBD |
+| Alle LEDs korrekt synchronisiert (Feintuning) | `keylab_feedback.py` |
 | Display-Feinschliff (Truncation, Sonderzeichen) | `keylab_display.py` |
 | Error-Handling für alle FL API Calls | Alle Handler |
 | Channel Rack Mode (Auto-Switch wenn CR fokussiert) | `keylab_mixer.py` |
@@ -258,4 +242,4 @@
 
 ---
 
-*Letzte Aktualisierung: 2026-05-15 — Phase 10 abgeschlossen; Phase 10.1 Foundation + Pad-Mode-Fix in Arbeit*
+*Letzte Aktualisierung: 2026-05-16 — Phasen 10.1, 11, 12 abgeschlossen; Regeln in `CONTROLLER_RULES.md`*

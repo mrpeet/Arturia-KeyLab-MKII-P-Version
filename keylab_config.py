@@ -166,26 +166,46 @@ class LiveBankButton:
 
 # ---------------------------------------------------------------------------
 #  Pads (Keys Port · Channel 10 · Note On + Poly Aftertouch)
-#  Physical layout (top-left = Pad 1):
-#    Pad 1 (48)  Pad 2 (49)  Pad 3 (50)  Pad 4 (51)
-#    Pad 5 (44)  Pad 6 (45)  Pad 7 (46)  Pad 8 (47)
-#    Pad 9 (40)  Pad 10(41)  Pad 11(42)  Pad 12(43)
-#    Pad 13(36)  Pad 14(37)  Pad 15(38)  Pad 16(39)
+#  Pad 1–16 layout (top-left = Pad 1); see hardware_map.md
+#    Pad 1 (36)  Pad 2 (37)  Pad 3 (38)  Pad 4 (39)
+#    Pad 5 (40)  Pad 6 (41)  Pad 7 (42)  Pad 8 (43)
+#    Pad 9 (44)  Pad 10(45)  Pad 11(46)  Pad 12(47)
+#    Pad 13(48)  Pad 14(49)  Pad 15(50)  Pad 16(51)
+#  LED slot i (0x70+i) = Pad i+1 — use NOTE_TO_SLOT, not note-36
 # ---------------------------------------------------------------------------
 class Pad:
     PAD_CHANNEL = 9  # 0-indexed = MIDI channel 10
 
-    # Note numbers in physical order (Pad 1–16)
+    # Pad 1–16 in row order (slot 0 = Pad 1 = LED 0x70)
     NOTES = [
-        48, 49, 50, 51,  # Row 1 (top)
-        44, 45, 46, 47,  # Row 2
-        40, 41, 42, 43,  # Row 3
-        36, 37, 38, 39,  # Row 4 (bottom)
+        36, 37, 38, 39,  # Row 1 (top)
+        40, 41, 42, 43,  # Row 2
+        44, 45, 46, 47,  # Row 3
+        48, 49, 50, 51,  # Row 4 (bottom)
+    ]
+
+    NOTE_TO_SLOT = {note: slot for slot, note in enumerate(NOTES)}
+
+    @staticmethod
+    def slot_to_led_slot(pad_slot):
+        """Map pad slot 0–15 to physical RGB LED index (vertical flip on hardware)."""
+        row = pad_slot // 4
+        col = pad_slot % 4
+        return (3 - row) * 4 + col
+
+    LED_IDS = [
+        0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77,
+        0x78, 0x79, 0x7A, 0x7B, 0x7C, 0x7D, 0x7E, 0x7F,
     ]
 
     FIRST = 36
     LAST  = 51
     COUNT = 16
+
+
+Pad.NOTE_TO_LED_SLOT = {
+    note: Pad.slot_to_led_slot(slot) for slot, note in enumerate(Pad.NOTES)
+}
 
 
 # ---------------------------------------------------------------------------

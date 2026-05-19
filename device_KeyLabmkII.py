@@ -21,9 +21,21 @@ from keylab_state import KeyLabState
 from keylab_transport import handle_transport
 from keylab_daw_commands import handle_daw_commands
 from keylab_navigation import handle_navigation
-from keylab_mixer import handle_mixer, handle_free_fader, handle_free_encoder, reset_soft_pickup_on_focus_change
+from keylab_mixer import (
+    handle_mixer,
+    handle_free_fader,
+    handle_free_encoder,
+    reset_soft_pickup_on_focus_change,
+    reset_fader_state,
+)
 from keylab_plugin import handle_plugin_encoder, handle_plugin_special_jog
-from keylab_feedback import update_transport_leds, clear_all_leds
+from keylab_feedback import (
+    update_all_feedback,
+    update_refresh_feedback,
+    update_transport_leds,
+    tick_feedback_idle,
+    clear_all_leds,
+)
 import keylab_long_press
 
 # Set True only while debugging MIDI routing in Script Output
@@ -56,8 +68,8 @@ def OnInit():
     _pages.SetActivePage('welcome', expires=1500)
     _pages.SetActivePage('main')
 
-    # Sync transport LEDs to current FL state
-    update_transport_leds()
+    reset_fader_state(_state)
+    update_all_feedback(_state)
 
     print("### KeyLab mkII P Version ready ###")
 
@@ -125,7 +137,7 @@ def OnMidiMsg(event):
 def OnRefresh(flags):
     """Called by FL Studio when internal state changes (play/stop/record/etc.)."""
     _sync_main_display()
-    update_transport_leds()
+    update_refresh_feedback(_state, flags)
 
 
 def OnIdle():
@@ -134,6 +146,7 @@ def OnIdle():
     _update_plugin_mode()
     _sync_mixer_bank()
     reset_soft_pickup_on_focus_change(_state)
+    tick_feedback_idle(_state)
 
 
 def OnUpdateBeatIndicator(value):
@@ -186,6 +199,9 @@ def _sync_mixer_bank():
     target_bank = (current_track - 1) // 8
     if target_bank != _state.bank_offset:
         _state.bank_offset = target_bank
+        reset_fader_state(_state)
+        from keylab_feedback import update_track_button_leds
+        update_track_button_leds(_state)
 
 
 def _sync_main_display():

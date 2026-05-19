@@ -20,6 +20,7 @@ _DEFAULTS = {
     'pad_mode': PAD_MODE_CHROMATIC,  # Default: Chromatic from C3 (see ROADMAP 10.1)
     'pad_bank_offset': 0,
     'pad_velocity_enabled': True,
+    'pad_led_dirty': False,
 }
 
 _STATE_FILENAME = 'keylab_pad_state.json'
@@ -53,6 +54,8 @@ def _read_file_state():
                 data['pad_bank_offset'] = int(val)
             elif key == 'pad_velocity_enabled':
                 data['pad_velocity_enabled'] = val in ('1', 'true', 'True', 'on', 'On')
+            elif key == 'pad_led_dirty':
+                data['pad_led_dirty'] = val in ('1', 'true', 'True', 'on', 'On')
         return data if data else None
     except Exception:
         return None
@@ -66,6 +69,8 @@ def _write_file_state(data):
             f.write('pad_bank_offset=%d\n' % int(data.get('pad_bank_offset', 0)))
             vel = data.get('pad_velocity_enabled', True)
             f.write('pad_velocity_enabled=%d\n' % (1 if vel else 0))
+            dirty = data.get('pad_led_dirty', False)
+            f.write('pad_led_dirty=%d\n' % (1 if dirty else 0))
     except Exception:
         pass
 
@@ -130,3 +135,23 @@ def set_pad_velocity_enabled(value):
     enabled = bool(value)
     _store()['pad_velocity_enabled'] = enabled
     _sync_file_from_store()
+
+
+def mark_pad_led_dirty():
+    """Forward script refreshes pad idle colors on next OnIdle."""
+    _store()['pad_led_dirty'] = True
+    _sync_file_from_store()
+
+
+def consume_pad_led_dirty():
+    """True once after DAW requested pad LED refresh (e.g. IN mode toggle)."""
+    file_data = _read_file_state()
+    dirty = False
+    if file_data and 'pad_led_dirty' in file_data:
+        dirty = bool(file_data['pad_led_dirty'])
+    elif _store().get('pad_led_dirty'):
+        dirty = True
+    if dirty:
+        _store()['pad_led_dirty'] = False
+        _sync_file_from_store()
+    return dirty

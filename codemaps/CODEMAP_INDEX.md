@@ -22,6 +22,8 @@ Zentrale Navigation für KI-Assistenz (Cursor/Antigravity). Diese Maps beschreib
 | `adding_handlers.md` | Schritt-für-Schritt: Neues Handler-Modul erstellen | Wenn du einen komplett neuen Bereich hinzufügst |
 | `free_mode.md` | Free Mode Logik: Was wird durchgereicht, was blockiert | Bei Änderungen am Free Mode Verhalten |
 | `long_press.md` | `keylab_long_press.py`: 0,75 s Schwelle, OnIdle-Poll, sofortiges LCD | Bei Short/Long-Press auf Buttons |
+
+**Controller rules (LED, LCD, timing):** [`CONTROLLER_RULES.md`](../CONTROLLER_RULES.md)
 | `plugin_control.md` | Plugin-Modus: Encoder-Mapping, `plugin_database.py` Schema | Bei Plugin-Parameter-Mapping |
 
 ---

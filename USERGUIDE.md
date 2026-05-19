@@ -18,7 +18,8 @@ Letzte Aktualisierung: 2026-04-15
 9. [Plugin-Steuerung](#9-plugin-steuerung)
 10. [Free Mode](#10-free-mode)
 11. [LCD-Feedback](#11-lcd-feedback)
-12. [Pads](#12-pads) *(Phase 11 – in Arbeit)*
+12. [Pads](#12-pads)
+13. [LED-Regeln](#13-led-regeln)
 
 ---
 
@@ -121,13 +122,15 @@ Die 9 Fader steuern die Lautstärke:
 
 ### Soft Pickup
 
-Beim ersten Bewegen eines Faders nach dem Laden zeigt das LCD den aktuellen FL-Wert (`-> 75%`). Der Fader muss erst diesen Wert **kreuzen**, bevor er aktiv wird — so entstehen keine Sprünge.
+Beim ersten Bewegen eines Faders nach dem Laden zeigt das LCD den aktuellen FL-Wert in dB (z. B. `-> -6.0 dB`). Der Fader muss erst diesen Wert **kreuzen**, bevor er aktiv wird — so entstehen keine Sprünge.
 
-> **Tipp:** Fader berühren zeigt den Track-Namen auf dem LCD.
+Beim Bewegen: **Zeile 1** = Track-/Channel-Name, **Zeile 2** = Lautstärke in **dB** (aus FL gelesen, nicht aus der Hardware-Position — auch bei schneller Faderbewegung korrekt).
+
+> **Tipp:** Fader berühren zeigt Track-Name (Zeile 1) und aktuelle dB (Zeile 2).
 
 ### Banking
 
-Mit den [Bank Buttons (Prev/Next)](#8-bank-buttons) kann auf Tracks 9–16, 17–24 usw. umgeschaltet werden. Beim Bank-Wechsel wird Soft Pickup zurückgesetzt.
+Mit den [Bank Buttons (Prev/Next)](#8-bank-buttons) (Part 48/49) wechselst du in Schritten von 8 Inserts/Channels — bis zum **letzten** Track des Projekts. Das LCD zeigt den echten Bereich (z. B. `Tracks 25–31`, nicht `25–32` wenn der letzte Slot leer ist). Beim Bank-Wechsel wird Soft Pickup zurückgesetzt.
 
 ---
 
@@ -168,7 +171,7 @@ Die zwei Buttons links neben den Fadern (`<` und `>`):
 | **`<` (Bank Prev)** | Bank um 8 zurück (min. 0) | **Free Mode** ein/aus (LCD bei Schwelle) |
 | **`>` (Bank Next)** | Bank um 8 vor | — |
 
-LCD zeigt beim Bank-Wechsel: `Bank / Tracks 9-16`
+LCD zeigt beim Bank-Wechsel: `Bank / Tracks 9-16` (letzte Bank nur bis zum höchsten vorhandenen Track)
 
 ---
 
@@ -242,8 +245,8 @@ Das LCD zeigt kontextuell Informationen. Die Anzeigedauer variiert:
 | Kontext | Zeile 1 | Zeile 2 | Dauer |
 |:--------|:--------|:--------|:------|
 | Standard | Channel-Name | Pattern-Name | dauerhaft |
-| Fader | `Fader N` / `Master` | Lautstärke % | 0,8s |
-| Fader (Touch) | `Fader N` | Track-Name | 2s |
+| Fader | Track-Name | Lautstärke dB (FL-Readback) | 0,8s |
+| Fader (Touch) | Track-Name | dB (aktuell) | 2s |
 | Encoder | Track-Name | `L 30%` / `Center` / `R 45%` | 0,8s |
 | Navigation | `Nav` | Beschreibung | 1s |
 | Plugin | Plugin-Name | Parameter / `Not mapped!` | 1,5s |
@@ -255,12 +258,23 @@ Das LCD zeigt kontextuell Informationen. Die Anzeigedauer variiert:
 
 ## 12. Pads
 
-*(Phase 11 — noch nicht implementiert)*
+**Layout (Pad 1 oben links):** Reihe 1 = Noten 36–39, Reihe 4 unten = 48–51 (siehe `hardware_map.md`).
 
 - **Drum Map:** Standard GM-Drum-Layout (intern `fpc`)
-- **Chromatischer Modus:** Chromatische Noten ab C3 (Default)
+- **Chromatischer Modus:** Pad 1 = C3, Pad 2 = C#3, … (Pad 16 = höchste Note der Bank)
 - **Modus-Wechsel:** In-Button (Note 87) kurz drücken
-- **Pad-Velocity:** In-Button (Note 87) lang drücken (≥0,75 s) — aus = feste 75%-Anschlagstärke (MIDI 95); LCD bei Schwelle
+- **Pad-Velocity:** In-Button (Note 87) lang drücken (≥0,75 s) — LCD `Pad Velo: On` / `Pad Velo: Off`; aus = feste 75%-Anschlagstärke (MIDI 95)
+- **Pad-LEDs:** Chromatic = **weiß**, Drum Map = **lila**; ungedrückt **50%**, beim Drücken heller bis **100%** (Anschlagstärke). In Arturia MIDI Control Center: Pad-LED = **Off** (nicht „Light when triggered“)
+- **Plugin-Modus:** Encoder steuern Plugin-Parameter; Hardware-Fader 1–8 sind deaktiviert — für Fader-Passthrough **Free Mode** (Bank Prev lang)
+
+---
+
+## 13. LED-Regeln
+
+Vollständige Spezifikation: [`CONTROLLER_RULES.md`](CONTROLLER_RULES.md)
+
+- **DAW/Navigation:** Toggle-Zustände 30%/100%; Nav + Part Prev/Next immer 100% (einmalig bei Init)
+- **Track-Buttons 1–8:** FL-Farbe; muted = aus, ausgewählt = 100%, andere in der Bank = 20% (nur bei Track-/Bank-Wechsel)
 
 ---
 

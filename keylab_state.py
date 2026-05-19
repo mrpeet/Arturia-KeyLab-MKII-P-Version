@@ -83,8 +83,18 @@ class KeyLabState:
         self.fader_last_any_move_ms = 0.0
         # While set, touch-name hints are blocked (value/pickup hint has priority)
         self.fader_value_hint_until_ms = 0.0
+        # At physical top: stop setTrackVolume until fader drops (prevents 100% oscillation)
+        self.fader_at_ceiling = [False] * Fader.COUNT
+        self.fader_last_written_linear = [0.0] * Fader.COUNT
 
         # --- Plugin mode ---
+        self.plugin_fader_hint_until_ms = 0.0
+
+        # --- Track-button LED refresh (only when selection changes) ---
+        self.last_led_mixer_track = -1
+        self.last_led_channel = -1
+        self.last_led_bank_offset = -1
+
         self.plugin_mode = False       # When True, encoders 1-8 control plugin params
         self.last_plugin_name = ""     # Cache: last detected plugin name
         self.plugin_encoder_values = [0.0] * 8  # Current values for relative encoders
