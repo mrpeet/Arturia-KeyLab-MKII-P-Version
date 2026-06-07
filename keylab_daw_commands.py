@@ -39,38 +39,42 @@ def handle_daw_commands(event, state, pages):
     # Note Off events from leaking to the Channel Rack when dialogs block
     if event.data1 == TrackControl.RECORD:
         if event.data2 > 0:
-            _do_track_arm(event, pages)
+            _do_snap_toggle(event, pages)
         return True
 
     if event.data1 == TrackControl.SOLO:
         if event.data2 > 0:
-            _do_track_solo(event, pages)
+            _do_new_pattern(event, pages)
         return True
 
     if event.data1 == TrackControl.MUTE:
         if event.data2 > 0:
-            _do_track_mute(event, pages)
+            _do_toggle_pattern_song(event, pages)
         return True
 
     if event.data1 == TrackControl.READ:
         if event.data2 > 0:
-            pass # Usually automation read, no direct FL mapping, maybe ignore or show hint
+            _do_tap_tempo(event, pages)
         return True
 
     if event.data1 == TrackControl.WRITE:
         if event.data2 > 0:
-            pass # Usually automation write
+            long_press.begin('write_btn', on_long=lambda: _do_cut(pages), on_short=lambda: _do_undo(pages))
+        else:
+            long_press.release('write_btn')
         return True
 
     # Global Controls (Row 2 buttons)
     if event.data1 == GlobalControl.SAVE:
         if event.data2 > 0:
-            _do_cycle_windows(pages)
+            _do_toggle_browser_cr(pages)
         return True
 
     if event.data1 == GlobalControl.IN:
         if event.data2 > 0:
-            _do_toggle_pad_mode(state, pages)
+            long_press.begin('in_btn', on_long=lambda: _do_toggle_pad_velocity(state, pages), on_short=lambda: _do_toggle_pad_mode(state, pages))
+        else:
+            long_press.release('in_btn')
         return True
 
     if event.data1 == GlobalControl.OUT:
@@ -115,6 +119,64 @@ def _do_track_arm(event, pages):
         _show_hint(pages, "Track %d Arm" % track)
 
 
+def _do_snap_toggle(event, pages):
+    """Toggle snap mode."""
+    ui.snapOnOff()
+    SNAP_MODE = {
+        0: 'Line',
+        1: 'Cell',
+        3: 'None',
+        4: '1/6 Step',
+        5: '1/4 Step',
+        6: '1/3 Step',
+        7: '1/2 Step', 
+        8: 'Step',
+        9: '1/6 Beat',
+        10: '1/4 Beat',
+        11: '1/3 Step',
+        12: '1/2 Beat',
+        13: 'Beat',
+        14: 'Bar'
+    }
+    snap_mode = ui.getSnapMode()
+    snap_str = SNAP_MODE.get(snap_mode, "Unknown")
+    _show_hint(pages, "Snap: " + snap_str)
+    update_daw_command_leds()
+
+
+def _do_new_pattern(event, pages):
+    """Create a new pattern without prompt."""
+    flag = _resolve_ffnep_no_prompt_flag()
+    if flag is not None:
+        patterns.findFirstNextEmptyPat(flag)
+    else:
+        patterns.findFirstNextEmptyPat(1)
+    pat_num = patterns.patternNumber()
+    _show_hint(pages, "Pat %d" % pat_num)
+    update_daw_command_leds()
+
+
+def _do_tap_tempo(event, pages):
+    """Trigger tap tempo."""
+    transport.globalTransport(midi.FPT_TapTempo, 1)
+    import mixer
+    tempo = mixer.getCurrentTempo(1)
+    _show_hint(pages, "Tempo: %d BPM" % tempo)
+    update_daw_command_leds()
+
+
+def _do_toggle_browser_cr(pages):
+    """Toggle focus between Channel Rack and Browser."""
+    if ui.getFocused(midi.widBrowser):
+        ui.showWindow(midi.widChannelRack)
+        ui.setFocused(midi.widChannelRack)
+        _show_hint(pages, "Channel Rack")
+    else:
+        ui.showWindow(midi.widBrowser)
+        ui.setFocused(midi.widBrowser)
+        _show_hint(pages, "Browser")
+
+
 def _do_track_solo(event, pages):
     """Solo currently selected track/channel."""
     if ui.getFocused(midi.widMixer):
@@ -137,6 +199,15 @@ def _do_track_mute(event, pages):
         import channels
         channels.muteChannel(channels.channelNumber())
         _show_hint(pages, "Mute Channel")
+
+
+def _do_toggle_pattern_song(event, pages):
+    """Toggle between Pattern and Song mode."""
+    new_mode = 1 if not transport.getLoopMode() else 0
+    transport.setLoopMode(new_mode)
+    mode_str = "Pattern" if new_mode else "Song"
+    _show_hint(pages, mode_str)
+    update_daw_command_leds()
 
 
 def _do_undo(pages):

@@ -33,7 +33,7 @@
 |:---            |:---     |:---   |:---             |:---                                     |:---    |
 | Record (Reihe 1) | Note On | 0  | SnapToggle      | `ui.snapOnOff`                          | fertig |
 | Solo           | Note On | 8     | NewPattern      | `patterns.findFirstNextEmptyPat`        | fertig |
-| Mute           | Note On | 16    | FocusMixer      | `ui.showWindow(widMixer)`               | fertig |
+| Mute           | Note On | 16    | TogglePatternSong | `transport.setLoopMode` (toggle)        | fertig |
 | Read           | Note On | 74    | TapTempo        | `transport.globalTransport(FPT_TapTempo)` | fertig |
 | Write          | Note On | 75    | Undo/Cut        | Short=`general.undoUp` Long=`ui.cut`      | fertig |
 

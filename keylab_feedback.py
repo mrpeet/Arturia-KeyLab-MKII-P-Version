@@ -17,6 +17,7 @@ from keylab_dispatch import send_to_device
 _VAL_ON = 0x7F
 _VAL_DIM = 0x26   # ~30% per CONTROLLER_RULES.md
 _VAL_OFF = 0x00
+_VAL_3_PERCENT = 0x04  # ~3% of 127
 
 # Transport
 _LED_REWIND = 0x6A
@@ -96,11 +97,56 @@ def _send_rgb(btn_id, r, g, b):
     send_to_device(payload)
 
 
+def _boost_saturation(r, g, b, boost=0.65):
+    """Boost saturation of an RGB triplet (0-255) so pale FL colors stay
+    visually distinct on the hardware LEDs.
+
+    Strategy: normalize so the brightest channel is always 255, then
+    lerp between the original normalized color and a fully-saturated
+    version (min channel → 0) using *boost* as the blend weight.
+
+      boost = 0.0  → no change (pure normalized color)
+      boost = 1.0  → max saturation (darkest channel forced to 0)
+
+    The overall perceived lightness is preserved by the normalization step,
+    which is then re-applied by the caller's brightness multiplier.
+    """
+    max_ch = max(r, g, b)
+    if max_ch == 0:
+        return r, g, b  # black stays black
+
+    # Normalize so the brightest channel fills the 0-255 range.
+    nr = (r / max_ch) * 255.0
+    ng = (g / max_ch) * 255.0
+    nb = (b / max_ch) * 255.0
+
+    # Fully-saturated version: shift min channel to 0, keep hue.
+    min_n = min(nr, ng, nb)
+    sr = nr - min_n
+    sg = ng - min_n
+    sb = nb - min_n
+    # Re-normalize saturated version so it still peaks at 255.
+    sat_max = max(sr, sg, sb)
+    if sat_max > 0:
+        sr = (sr / sat_max) * 255.0
+        sg = (sg / sat_max) * 255.0
+        sb = (sb / sat_max) * 255.0
+
+    # Blend: boosted_color = lerp(normalized, saturated, boost)
+    br = nr + (sr - nr) * boost
+    bg = ng + (sg - ng) * boost
+    bb = nb + (sb - nb) * boost
+
+    return br, bg, bb
+
+
 def _fl_color_to_rgb(color_int, brightness):
     """FL color int (0xRRGGBB) → RGB 0–0x1F (32 steps) for RGB LED SysEx.
-    
+
     Hardware spec: R/G/B values MUST be 0x00-0x1F (not 0-127!).
     Uncolored tracks (unsaturated greys) are rendered as white.
+    Pale FL colors are saturation-boosted so they remain visually distinct
+    on the LED hardware (see _boost_saturation).
     """
     r = (color_int >> 16) & 0xFF
     g = (color_int >> 8) & 0xFF
@@ -113,6 +159,10 @@ def _fl_color_to_rgb(color_int, brightness):
     is_grey = (max_ch - min_ch) < 25 and max_ch < 160
     if is_grey or max_ch == 0:
         r, g, b = 220, 220, 220  # render as white
+    else:
+        # Boost saturation so pale colors still read as distinct hues on LEDs.
+        # 0.65 = strong boost without making every color look neon.
+        r, g, b = _boost_saturation(r, g, b, boost=0.65)
 
     # Scale 0-255 -> 0-31 and apply brightness
     dim_r = int((r / 255.0) * 31 * brightness)
@@ -128,7 +178,7 @@ def _fl_color_to_rgb(color_int, brightness):
             else:
                 # Unfocused: dim but clearly visible (2)
                 floor = 2
-                
+
             if r > 0 and r >= g and r >= b: dim_r = floor
             if g > 0 and g >= r and g >= b: dim_g = floor
             if b > 0 and b >= r and b >= g: dim_b = floor
@@ -166,9 +216,9 @@ def update_transport_leds(beat_value=None):
     _set_mono(_LED_STOP, _VAL_ON if not is_playing else _VAL_DIM)
 
     if beat_value is not None and is_recording:
-        _set_mono(_LED_RECORD, _VAL_ON if beat_value > 0 else _VAL_OFF)
+        _set_mono(_LED_RECORD, _VAL_ON if beat_value > 0 else _VAL_3_PERCENT)
     else:
-        _set_mono(_LED_RECORD, _VAL_ON if is_recording else _VAL_OFF)
+        _set_mono(_LED_RECORD, _VAL_ON if is_recording else _VAL_3_PERCENT)
 
     _set_mono(_LED_LOOP, _VAL_ON if is_loop else _VAL_DIM)
     _set_mono(_LED_REWIND, _VAL_ON)
@@ -210,22 +260,16 @@ def update_daw_command_leds():
         _mono_always_on(_LED_UNDO)
 
     try:
-        is_armed = False
-        is_solo = False
-        is_mute = False
-        if ui.getFocused(midi.widMixer):
-            track = mixer.trackNumber()
-            is_armed = mixer.isTrackArmed(track)
-            is_solo = mixer.isTrackSolo(track)
-            is_mute = mixer.isTrackMuted(track)
-        else:
-            ch = channels.channelNumber()
-            is_solo = channels.isChannelSolo(ch)
-            is_mute = channels.isChannelMuted(ch)
-            
-        _mono_toggle(_LED_TRACK_RECORD, is_armed)
-        _mono_toggle(_LED_TRACK_SOLO, is_solo)
-        _mono_toggle(_LED_TRACK_MUTE, is_mute)
+        # Record button LED reflects whether Snap is enabled (not 'None'/3)
+        is_snap = (ui.getSnapMode() != 3)
+        _mono_toggle(_LED_TRACK_RECORD, is_snap)
+        
+        # Solo button represents NewPattern (one-shot, always on)
+        _mono_always_on(_LED_TRACK_SOLO)
+        
+        # Mute button toggles pattern/song mode now
+        is_pattern = transport.getLoopMode() == 1
+        _set_mono(_LED_TRACK_MUTE, _VAL_ON if is_pattern else _VAL_3_PERCENT)
     except Exception:
         pass
 
