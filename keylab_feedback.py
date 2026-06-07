@@ -195,11 +195,6 @@ def init_static_mono_leds():
 def update_daw_command_leds():
     """Toggle states: 30% off / 100% on; mode/action buttons: always 100%."""
     _mono_toggle(_LED_METRO, ui.isMetronomeEnabled())
-    try:
-        snap_on = ui.getSnapMode() != 3
-    except Exception:
-        snap_on = bool(ui.getSnapMode())
-    _mono_toggle(_LED_TRACK_SNAP, snap_on)
     _mono_toggle(_LED_OUT, ui.isLoopRecEnabled())
 
     _mono_always_on(_LED_SAVE)
@@ -208,15 +203,32 @@ def update_daw_command_leds():
     try:
         import general
         if general.getUndoHistoryPos() > 0:
-            _mono_always_on(_LED_UNDO)
+            _set_mono(_LED_UNDO, 127) # 100%
         else:
-            _mono_toggle(_LED_UNDO, False)
+            _set_mono(_LED_UNDO, 89)  # ~70%
     except Exception:
         _mono_always_on(_LED_UNDO)
 
-    _mono_always_on(_LED_TRACK_RECORD)
-    _mono_toggle(_LED_TRACK_SOLO, ui.getFocused(midi.widMixer))
-    _mono_toggle(_LED_TRACK_MUTE, snap_on)
+    try:
+        is_armed = False
+        is_solo = False
+        is_mute = False
+        if ui.getFocused(midi.widMixer):
+            track = mixer.trackNumber()
+            is_armed = mixer.isTrackArmed(track)
+            is_solo = mixer.isTrackSolo(track)
+            is_mute = mixer.isTrackMuted(track)
+        else:
+            ch = channels.channelNumber()
+            is_solo = channels.isChannelSolo(ch)
+            is_mute = channels.isChannelMuted(ch)
+            
+        _mono_toggle(_LED_TRACK_RECORD, is_armed)
+        _mono_toggle(_LED_TRACK_SOLO, is_solo)
+        _mono_toggle(_LED_TRACK_MUTE, is_mute)
+    except Exception:
+        pass
+
     _mono_always_on(_LED_TRACK_READ)
     _mono_always_on(_LED_TRACK_WRITE)
 

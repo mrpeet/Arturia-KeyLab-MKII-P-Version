@@ -39,33 +39,27 @@ def handle_daw_commands(event, state, pages):
     # Note Off events from leaking to the Channel Rack when dialogs block
     if event.data1 == TrackControl.RECORD:
         if event.data2 > 0:
-            _do_snap_toggle(event, pages)
-        return True  # Always consume to prevent note leaking
+            _do_track_arm(event, pages)
+        return True
 
     if event.data1 == TrackControl.SOLO:
         if event.data2 > 0:
-            _do_new_pattern(event, pages)
+            _do_track_solo(event, pages)
         return True
 
     if event.data1 == TrackControl.MUTE:
         if event.data2 > 0:
-            _do_focus_mixer(event, pages)
+            _do_track_mute(event, pages)
         return True
 
     if event.data1 == TrackControl.READ:
         if event.data2 > 0:
-            _do_tap_tempo(event, pages)
+            pass # Usually automation read, no direct FL mapping, maybe ignore or show hint
         return True
 
     if event.data1 == TrackControl.WRITE:
         if event.data2 > 0:
-            long_press.begin(
-                'daw_undo',
-                on_long=lambda: _do_cut(pages),
-                on_short=lambda: _do_undo(pages),
-            )
-        else:
-            long_press.release('daw_undo')
+            pass # Usually automation write
         return True
 
     # Global Controls (Row 2 buttons)
@@ -112,35 +106,37 @@ def handle_daw_commands(event, state, pages):
 #  Individual actions
 # ---------------------------------------------------------------------------
 
-def _do_snap_toggle(event, pages):
-    """Toggle snap mode on/off."""
-    ui.snapOnOff()
-    _show_hint(pages, "Snap: " + ("On" if ui.getSnapMode() else "Off"))
-    update_daw_command_leds()
+def _do_track_arm(event, pages):
+    """Arm currently selected mixer track."""
+    if ui.getFocused(midi.widMixer):
+        import mixer
+        track = mixer.trackNumber()
+        mixer.armTrack(track)
+        _show_hint(pages, "Track %d Arm" % track)
 
 
-def _do_new_pattern(event, pages):
-    """Create and jump to next empty pattern."""
-    flags = _resolve_ffnep_no_prompt_flag()
-    if flags is not None:
-        patterns.findFirstNextEmptyPat(flags)
+def _do_track_solo(event, pages):
+    """Solo currently selected track/channel."""
+    if ui.getFocused(midi.widMixer):
+        import mixer
+        mixer.soloTrack(mixer.trackNumber())
+        _show_hint(pages, "Solo Track")
     else:
-        # Fallback for FL versions without FFNEP no-prompt constants:
-        # jump directly to a new pattern slot (default naming, no rename prompt).
-        patterns.jumpToPattern(patterns.patternMax() + 1)
-    _show_hint(pages, "New Pattern")
+        import channels
+        channels.soloChannel(channels.channelNumber())
+        _show_hint(pages, "Solo Channel")
 
 
-def _do_focus_mixer(event, pages):
-    """Show and focus the mixer window."""
-    ui.showWindow(midi.widMixer)
-    _show_hint(pages, "Mixer")
-
-
-def _do_tap_tempo(event, pages):
-    """Tap tempo detection."""
-    transport.globalTransport(midi.FPT_TapTempo, 1)
-    _show_hint(pages, "Tap Tempo")
+def _do_track_mute(event, pages):
+    """Mute currently selected track/channel."""
+    if ui.getFocused(midi.widMixer):
+        import mixer
+        mixer.muteTrack(mixer.trackNumber())
+        _show_hint(pages, "Mute Track")
+    else:
+        import channels
+        channels.muteChannel(channels.channelNumber())
+        _show_hint(pages, "Mute Channel")
 
 
 def _do_undo(pages):
@@ -160,12 +156,15 @@ def _do_cycle_windows(pages):
     """Cycle focus between Channel Rack, Mixer, and Browser."""
     if ui.getFocused(midi.widChannelRack):
         ui.showWindow(midi.widMixer)
+        ui.setFocused(midi.widMixer)
         _show_hint(pages, "Mixer")
     elif ui.getFocused(midi.widMixer):
         ui.showWindow(midi.widBrowser)
+        ui.setFocused(midi.widBrowser)
         _show_hint(pages, "Browser")
     else:
         ui.showWindow(midi.widChannelRack)
+        ui.setFocused(midi.widChannelRack)
         _show_hint(pages, "Channel Rack")
 
 

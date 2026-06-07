@@ -156,14 +156,18 @@ def OnDirtyMixerTrack(index):
     """Called when a mixer track changes (name, color, mute, solo, etc.)."""
     if _state is not None:
         _sync_bank()
+        from keylab_feedback import update_track_button_leds, update_daw_command_leds
         update_track_button_leds(_state)
+        update_daw_command_leds()
 
 
 def OnDirtyChannel(index, flag):
     """Called when a channel changes. flag=4 (CE_Select) = channel was selected."""
     if _state is not None:
         _sync_bank()
+        from keylab_feedback import update_track_button_leds, update_daw_command_leds
         update_track_button_leds(_state)
+        update_daw_command_leds()
 
 
 def OnIdle():
