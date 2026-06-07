@@ -47,8 +47,11 @@ _PAD_VELOCITY_FIXED = 95  # 75% of MIDI 127 when velocity is disabled
 # Status bytes
 _NOTE_ON_CH10 = 0x90 + Pad.PAD_CHANNEL   # 0x99
 _NOTE_OFF_CH10 = 0x80 + Pad.PAD_CHANNEL  # 0x89
+_POLY_AFTERTOUCH_CH10 = 0xA0 + Pad.PAD_CHANNEL # 0xA9
+
 _NOTE_ON_CH1 = 0x90
 _NOTE_OFF_CH1 = 0x80
+_POLY_AFTERTOUCH_CH1 = 0xA0
 
 # FPC_MAP: native pad note -> GM Drum note (channel 10)
 _FPC_MAP = {
@@ -94,16 +97,19 @@ V_COLLECTION = {
 }
 
 
-def _is_pad_note_event(event):
-    """True if this is a pad Note On/Off on the hardware drum channel."""
-    if event.status not in (_NOTE_ON_CH10, _NOTE_OFF_CH10):
+def _is_pad_event(event):
+    """True if this is a pad Note On/Off/Aftertouch on the hardware drum channel."""
+    if event.status not in (_NOTE_ON_CH10, _NOTE_OFF_CH10, _POLY_AFTERTOUCH_CH10):
         return False
     return Pad.FIRST <= event.data1 <= Pad.LAST
 
 
-def _set_melodic_channel(event, note_on):
+def _set_melodic_channel(event, note_on, is_aftertouch=False):
     """Rewrite event to MIDI channel 1 (melodic, not GM drum channel 10)."""
-    event.status = _NOTE_ON_CH1 if note_on else _NOTE_OFF_CH1
+    if is_aftertouch:
+        event.status = _POLY_AFTERTOUCH_CH1
+    else:
+        event.status = _NOTE_ON_CH1 if note_on else _NOTE_OFF_CH1
     event.midiChan = 0
     try:
         event.note = event.data1
@@ -117,6 +123,7 @@ def _transpose_pad(event):
     bank = pad_state.get_pad_bank_offset()
     mode = pad_state.get_pad_mode()
     note_on = event.status == _NOTE_ON_CH10 and event.data2 > 0
+    is_aftertouch = event.status == _POLY_AFTERTOUCH_CH10
 
     if mode == pad_state.PAD_MODE_CHROMATIC:
         idx = Pad.NOTE_TO_SLOT.get(note)
@@ -124,7 +131,7 @@ def _transpose_pad(event):
             return
         new_note = _CHROMATIC_BASE + idx + bank * 16
         event.data1 = max(0, min(127, new_note))
-        _set_melodic_channel(event, note_on)
+        _set_melodic_channel(event, note_on, is_aftertouch)
     else:
         mapped = _FPC_MAP.get(note)
         if mapped is None:
@@ -158,18 +165,25 @@ def OnIdle():
 
 def OnMidiIn(event):
     """Intercept before FL processing."""
-    if _is_pad_note_event(event):
+    if _is_pad_event(event):
         old_note = event.data1
         old_status = event.status
         note_on = event.status == _NOTE_ON_CH10 and event.data2 > 0
+        is_aftertouch = event.status == _POLY_AFTERTOUCH_CH10
+        is_note_off = event.status == _NOTE_OFF_CH10 or (event.status == _NOTE_ON_CH10 and event.data2 == 0)
+
         _transpose_pad(event)
         _apply_pad_velocity(event, note_on)
         pad_idx = pad_index_from_note(old_note)
+        
         if pad_idx is not None:
             if note_on:
                 set_pad_color(pad_idx, event.data2)
-            else:
+            elif is_aftertouch:
+                set_pad_color(pad_idx, event.data2)
+            elif is_note_off:
                 set_pad_color(pad_idx, 0)
+                
         if _DEBUG_PADS:
             print("Pad: mode=%s bank=%d vel=%s ch=%d note %d->%d vel=%d status %d->%d" % (
                 pad_state.get_pad_mode(),

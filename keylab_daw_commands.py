@@ -270,6 +270,8 @@ def _do_cycle_windows(pages):
         _show_hint(pages, "Channel Rack")
 
 
+
+
 def _do_toggle_pad_mode(state, pages):
     """Toggle between Drum Map (GM drums, ch10) and Chromatic (C3+, ch1)."""
     if state.pad_mode == pad_state.PAD_MODE_FPC:
