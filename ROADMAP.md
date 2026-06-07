@@ -187,18 +187,18 @@ Pad-Mode-Toggle (Chromatic Kanal 1 / Drum Map Kanal 10) ist gelöst — siehe `C
 
 ---
 
-## Phase 12 — LED Feedback ✅
+## Phase 12 — LED Feedback ⬜
 
-**Ziel:** Kohärente LED-Logik — Spezifikation in [`CONTROLLER_RULES.md`](CONTROLLER_RULES.md).
+**Ziel:** Kohärente LED-Logik und Fehlerbehebungen — Spezifikation in [`CONTROLLER_RULES.md`](CONTROLLER_RULES.md).
 
 | Bereich | Regel | Status |
 |:--------|:------|:-------|
-| **Pads** | Chromatic = weiß, Drum Map = lila | ✅ |
-| **DAW Commands** | Toggle off=30% / on=100%; Mode/Action immer 100% | ✅ |
-| **Navigation** | Bank L/R, Jog click immer 100% | ✅ |
-| **Mixer Part 48/49** | Prev/Next immer 100% | ✅ |
-| **Track Buttons** | Muted 0%, unfocused 20%, focused 100% FL-Farbe | ✅ |
-| **OnRefresh / OnIdle** | `update_all_feedback` + throttled track LEDs | ✅ |
+| **Pads** | IN Button toggle mode instantly, Farben nicht von Blau überschrieben | ⬜ |
+| **DAW Commands** | Init-State correct, Save-Button Cycle (CR -> Mixer -> Browser) | ⬜ |
+| **Transports** | Rewind/FastForward auf 100% | ⬜ |
+| **Navigation** | Nav-LEDs glitchen nicht mehr bei Jog Wheel turn | ⬜ |
+| **Track Buttons** | Helligkeit angehoben (sichtbar), Konflikt mit Part-Prev/Next gelöst | ⬜ |
+| **Mixer Part 48/49** | Prev/Next auf korrekten IDs | ⬜ |
 
 ---
 
@@ -242,4 +242,4 @@ Pad-Mode-Toggle (Chromatic Kanal 1 / Drum Map Kanal 10) ist gelöst — siehe `C
 
 ---
 
-*Letzte Aktualisierung: 2026-05-16 — Phasen 10.1, 11, 12 abgeschlossen; Regeln in `CONTROLLER_RULES.md`*
+*Letzte Aktualisierung: 2026-06-07 — Phase 12 zurück auf unerledigt für Bugfixes gesetzt*

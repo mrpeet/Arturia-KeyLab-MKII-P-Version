@@ -139,3 +139,69 @@
 | Aux 1 Pedal | Keys | CC | 12 | Werte: 0 bis 127 (Stufenlos) |
 | Aux 2 Pedal | Keys | CC | 13 | Werte: 0 bis 127 (Stufenlos) |
 | Aux 3 Pedal | Keys | CC | 14 | Werte: 0 bis 127 (Stufenlos) |
+
+---
+
+## 8. LED SysEx Protocol (Verified)
+
+> **Source:** Community reverse-engineering of KeyLab MkII SysEx protocol.
+> Arturia SysEx wrapper: `F0 00 20 6B 7F 42 [PAYLOAD] F7`
+
+### 8.1 Monochrome LED Command
+```
+F0 00 20 6B 7F 42  02 00 10  [LEDID] [VALUE]  F7
+```
+- **VALUE range:** `0x00` – `0x7F` (128 steps, 0 = off, 127 = full brightness)
+- **Monochrome color:** Always white
+
+### 8.2 RGB LED Command
+```
+F0 00 20 6B 7F 42  02 00 16  [LEDID] [R] [G] [B] [0x7F]  F7
+```
+- **R / G / B range:** `0x00` – `0x1F` (32 steps per channel, NOT 0-127!)
+- The trailing `0x7F` is a required terminator byte in the payload
+
+### 8.3 Full LED ID Table
+
+| LEDID (hex) | Button / LED        | Mono | RGB | Notes                        |
+|-------------|---------------------|------|-----|------------------------------|
+| 0x10        | Oct -               | ✓    |     |                              |
+| 0x11        | Oct +               | ✓    |     |                              |
+| 0x12        | Chord               | ✓    |     |                              |
+| 0x13        | Trans               | ✓    |     |                              |
+| 0x14        | MIDI                | ✓    |     |                              |
+| 0x15        | Chord Transp        | ✓    |     |                              |
+| 0x16        | Chord Mem           | ✓    |     |                              |
+| 0x17        | Pad                 | ✓    |     |                              |
+| 0x18        | Category            | ✓    |     | Default: blue                |
+| 0x19        | Preset              | ✓    |     | Default: blue                |
+| 0x1A        | ← (Nav Left)        | ✓    |     |                              |
+| 0x1B        | → (Nav Right)       | ✓    |     |                              |
+| 0x1C        | ANALOG LAB          | ✓    |     | Default: blue                |
+| 0x1D        | DAW                 | ✓    |     |                              |
+| 0x1E        | USER                | ✓    |     |                              |
+| 0x1F        | Part 1              | ✓    |     |                              |
+| 0x20        | Part 2              | ✓    |     |                              |
+| 0x21        | Live                | ✓    |     |                              |
+| 0x22–0x29   | Select 1–8          | ✓²   | ✓   | Track buttons (RGB)          |
+| 0x2A        | Multi               | ✓²   | ✓   |                              |
+| 0x60        | Solo                | ✓    |     | DAW COMMANDS / USER section  |
+| 0x61        | Mute                | ✓    |     |                              |
+| 0x62        | Record (Track Ctrl) | ✓    |     |                              |
+| 0x63        | Read                | ✓    |     |                              |
+| 0x64        | Write               | ✓    |     |                              |
+| 0x65        | Save                | ✓    |     |                              |
+| 0x66        | In                  | ✓    |     |                              |
+| 0x67        | Out                 | ✓    |     |                              |
+| 0x68        | Marker              | ✓    |     | Physically labeled "Metro"   |
+| 0x69        | Undo                | ✓    |     |                              |
+| 0x6A        | << (Rewind)         | ✓    |     | TRANSPORT section            |
+| 0x6B        | >> (FastFwd)        | ✓    |     |                              |
+| 0x6C        | STOP                | ✓    |     |                              |
+| 0x6D        | Pause/Play          | ✓    |     |                              |
+| 0x6E        | Record (Transport)  | ✓    |     | Default: red                 |
+| 0x6F        | Loop                | ✓    |     |                              |
+| 0x70–0x7F   | Pads 1–16           | ✓²   | ✓   | ² = on/off only (white)      |
+
+> ¹ Monochrome = always white  
+> ² Only on/off at full white brightness (no dimming via mono command)

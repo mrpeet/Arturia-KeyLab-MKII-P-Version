@@ -16,7 +16,7 @@ from keylab_config import (
     CC_STATUS,
 )
 from keylab_plugin import handle_plugin_special_jog
-from keylab_feedback import update_track_button_leds
+from keylab_feedback import update_daw_command_leds, flush_track_leds_if_ready
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ def _do_jog(event, pages, state):
                 _show_hint(pages, mixer.getTrackName(new_track))
         else:
             _show_hint(pages, mixer.getTrackName(new_track))
-        update_track_button_leds(state)
+        flush_track_leds_if_ready(state)
         return
 
     # Default: Channel Rack / anything else → select channels
@@ -119,7 +119,7 @@ def _do_jog(event, pages, state):
         ui.previous()
     else:
         ui.next()
-    update_track_button_leds(state)
+    flush_track_leds_if_ready(state)
 
 
 # ---------------------------------------------------------------------------

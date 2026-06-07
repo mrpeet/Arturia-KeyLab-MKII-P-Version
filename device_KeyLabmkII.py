@@ -9,6 +9,7 @@
 ]]
 """
 
+import time
 import ui
 import channels
 import mixer
@@ -34,6 +35,7 @@ from keylab_feedback import (
     update_refresh_feedback,
     update_transport_leds,
     tick_feedback_idle,
+    update_track_button_leds,
     clear_all_leds,
 )
 import keylab_long_press
@@ -49,16 +51,22 @@ _state = None       # type: KeyLabState
 _display = None     # type: KeyLabDisplay
 _pages = None       # type: KeyLabPagedDisplay
 
+_boot_time_ms = 0.0
+_boot_leds_refreshed = False
+
 
 # ---------------------------------------------------------------------------
 #  FL Studio Callbacks
 # ---------------------------------------------------------------------------
 
 def OnInit():
-    global _state, _display, _pages
+    global _state, _display, _pages, _boot_time_ms, _boot_leds_refreshed
     _state = KeyLabState()
     _display = KeyLabDisplay()
     _pages = KeyLabPagedDisplay(_display)
+    
+    _boot_time_ms = time.monotonic() * 1000.0
+    _boot_leds_refreshed = False
 
     print("### INIT KEYLAB mkII P Version ###")
 
@@ -138,13 +146,37 @@ def OnRefresh(flags):
     """Called by FL Studio when internal state changes (play/stop/record/etc.)."""
     _sync_main_display()
     update_refresh_feedback(_state, flags)
+    # HW_Dirty_Mixer_Sel (1): mixer track selected (e.g. mouse click) — update LEDs immediately
+    if flags & 1:
+        _sync_bank()
+        update_track_button_leds(_state)
+
+
+def OnDirtyMixerTrack(index):
+    """Called when a mixer track changes (name, color, mute, solo, etc.)."""
+    if _state is not None:
+        _sync_bank()
+        update_track_button_leds(_state)
+
+
+def OnDirtyChannel(index, flag):
+    """Called when a channel changes. flag=4 (CE_Select) = channel was selected."""
+    if _state is not None:
+        _sync_bank()
+        update_track_button_leds(_state)
 
 
 def OnIdle():
+    global _boot_leds_refreshed
+    if not _boot_leds_refreshed and _state is not None:
+        if (time.monotonic() * 1000.0) - _boot_time_ms > 1500.0:
+            update_all_feedback(_state)
+            _boot_leds_refreshed = True
+
     _pages.Refresh()
     keylab_long_press.poll()
     _update_plugin_mode()
-    _sync_mixer_bank()
+    _sync_bank()
     reset_soft_pickup_on_focus_change(_state)
     tick_feedback_idle(_state)
 
@@ -175,28 +207,30 @@ def _update_plugin_mode():
         _state.plugin_mode = focused
         if focused:
             try:
-                name = _plugins.getPluginName(channels.selectedChannel())
+                name = _plugins.getPluginName(channels.channelNumber())
             except Exception:
                 name = "Plugin"
             _pages.SetPageLines('plugin', line1=name, line2='Plugin Mode')
             _pages.SetActivePage('plugin', expires=1200)
 
 
-def _sync_mixer_bank():
-    """Auto-sync bank offset to selected mixer track so it's always visible.
+def _sync_bank():
+    """Auto-sync bank offset to selected mixer track or channel so it's always visible.
 
-    When mixer is focused and a track is selected (via jog wheel or mouse),
-    automatically switch to the correct bank so the track is on faders 1-8.
-    Master track (0) is always on fader 9 and doesn't affect bank selection.
+    When mixer or channel rack is focused and a track/channel is selected,
+    automatically switch to the correct bank so it is on faders 1-8.
     """
-    if not ui.getFocused(midi.widMixer):
-        return  # Only sync when mixer is focused
+    target_bank = _state.bank_offset
 
-    current_track = mixer.trackNumber()
-    if current_track == 0:
-        return  # Master is always on fader 9
+    if ui.getFocused(midi.widMixer):
+        current_track = mixer.trackNumber()
+        if current_track > 0:  # Master (0) is always on fader 9
+            target_bank = (current_track - 1) // 8
+    else:
+        # Channel Rack or other windows (fallback to Channel Rack)
+        current_ch = channels.channelNumber()
+        target_bank = current_ch // 8
 
-    target_bank = (current_track - 1) // 8
     if target_bank != _state.bank_offset:
         _state.bank_offset = target_bank
         reset_fader_state(_state)
@@ -206,7 +240,7 @@ def _sync_mixer_bank():
 
 def _sync_main_display():
     """Update the persistent 'main' page with current channel/pattern info."""
-    active_index = channels.selectedChannel()
+    active_index = channels.channelNumber()
     channel_name = channels.getChannelName(active_index)
     pattern_number = patterns.patternNumber()
     pattern_name = patterns.getPatternName(pattern_number)

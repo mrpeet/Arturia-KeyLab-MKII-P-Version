@@ -71,18 +71,12 @@ def handle_daw_commands(event, state, pages):
     # Global Controls (Row 2 buttons)
     if event.data1 == GlobalControl.SAVE:
         if event.data2 > 0:
-            _do_toggle_browser_cr(event, pages)
+            _do_cycle_windows(pages)
         return True
 
     if event.data1 == GlobalControl.IN:
         if event.data2 > 0:
-            long_press.begin(
-                'daw_in',
-                on_long=lambda: _do_toggle_pad_velocity(state, pages),
-                on_short=lambda: _do_toggle_pad_mode(state, pages),
-            )
-        else:
-            long_press.release('daw_in')
+            _do_toggle_pad_mode(state, pages)
         return True
 
     if event.data1 == GlobalControl.OUT:
@@ -162,14 +156,17 @@ def _do_cut(pages):
     _show_hint(pages, "Cut")
 
 
-def _do_toggle_browser_cr(event, pages):
-    """Toggle between Browser and Channel Rack focus."""
-    if ui.getFocused(midi.widBrowser):
-        ui.showWindow(midi.widChannelRack)
-        _show_hint(pages, "Channel Rack")
-    else:
+def _do_cycle_windows(pages):
+    """Cycle focus between Channel Rack, Mixer, and Browser."""
+    if ui.getFocused(midi.widChannelRack):
+        ui.showWindow(midi.widMixer)
+        _show_hint(pages, "Mixer")
+    elif ui.getFocused(midi.widMixer):
         ui.showWindow(midi.widBrowser)
         _show_hint(pages, "Browser")
+    else:
+        ui.showWindow(midi.widChannelRack)
+        _show_hint(pages, "Channel Rack")
 
 
 def _do_toggle_pad_mode(state, pages):
