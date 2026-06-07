@@ -53,10 +53,12 @@ _LED_PART_NEXT = 0x20
 #  RGB: track buttons (SysEx 0x02 0x00 0x16, id, R, G, B, 0x7F)
 # ---------------------------------------------------------------------------
 _TRACK_BTN_IDS = [0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29]
+_MASTER_BTN_ID = 0x2A
 
-_BRIGHT_FOCUSED   = 1.0
-_BRIGHT_UNFOCUSED = 0.25
-_BRIGHT_MUTED     = 0.1
+_BRIGHT_FOCUSED         = 1.0
+_BRIGHT_UNFOCUSED       = 0.25
+_BRIGHT_MUTED_FOCUSED   = 0.15
+_BRIGHT_MUTED           = 0.01  # Hardware might treat low values as completely off, handled in _fl_color_to_rgb
 
 _TRACK_LED_IDLE_MS = 60
 _last_track_led_ms = 0.0
@@ -120,9 +122,16 @@ def _fl_color_to_rgb(color_int, brightness):
     # Unfocused tracks: guarantee a minimum floor of 2 (just visible)
     if brightness < 1.0:
         if dim_r < 2 and dim_g < 2 and dim_b < 2:
-            if r >= g and r >= b:   dim_r = 2
-            elif g >= r and g >= b: dim_g = 2
-            else:                   dim_b = 2
+            if brightness == _BRIGHT_MUTED:
+                # Muted: absolutely darkest visible state (1)
+                floor = 1
+            else:
+                # Unfocused: dim but clearly visible (2)
+                floor = 2
+                
+            if r > 0 and r >= g and r >= b: dim_r = floor
+            if g > 0 and g >= r and g >= b: dim_g = floor
+            if b > 0 and b >= r and b >= g: dim_b = floor
 
     return (
         max(0, min(0x1F, dim_r)),
@@ -249,10 +258,11 @@ def update_track_button_leds(state):
                 if track_idx >= count:
                     _send_rgb(btn_id, 0, 0, 0)
                     continue
+                is_selected = (track_idx == selected)
                 if mixer.isTrackMuted(track_idx):
-                    bright = _BRIGHT_MUTED
+                    bright = _BRIGHT_MUTED_FOCUSED if is_selected else _BRIGHT_MUTED
                 else:
-                    bright = _BRIGHT_FOCUSED if track_idx == selected else _BRIGHT_UNFOCUSED
+                    bright = _BRIGHT_FOCUSED if is_selected else _BRIGHT_UNFOCUSED
                 col = mixer.getTrackColor(track_idx)
                 r, g, b = _fl_color_to_rgb(col, bright)
                 _send_rgb(btn_id, r, g, b)
@@ -267,13 +277,29 @@ def update_track_button_leds(state):
                 if ch_idx >= ch_count:
                     _send_rgb(btn_id, 0, 0, 0)
                     continue
+                is_selected = (ch_idx == selected)
                 if channels.isChannelMuted(ch_idx):
-                    bright = _BRIGHT_MUTED
+                    bright = _BRIGHT_MUTED_FOCUSED if is_selected else _BRIGHT_MUTED
                 else:
-                    bright = _BRIGHT_FOCUSED if ch_idx == selected else _BRIGHT_UNFOCUSED
+                    bright = _BRIGHT_FOCUSED if is_selected else _BRIGHT_UNFOCUSED
                 col = channels.getChannelColor(ch_idx)
                 r, g, b = _fl_color_to_rgb(col, bright)
                 _send_rgb(btn_id, r, g, b)
+                
+        # Master track (Track 0) is ALWAYS on the Multi button (0x2A), regardless of window focus
+        try:
+            master_muted = mixer.isTrackMuted(0)
+            master_selected = mixer.trackNumber() == 0 and ui.getFocused(midi.widMixer)
+            if master_muted:
+                bright = _BRIGHT_MUTED_FOCUSED if master_selected else _BRIGHT_MUTED
+            else:
+                bright = _BRIGHT_FOCUSED if master_selected else _BRIGHT_UNFOCUSED
+            col = mixer.getTrackColor(0)
+            r, g, b = _fl_color_to_rgb(col, bright)
+            _send_rgb(_MASTER_BTN_ID, r, g, b)
+        except Exception:
+            pass
+            
     except Exception:
         pass
     _sync_led_selection_cache(state)
