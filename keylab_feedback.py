@@ -242,10 +242,16 @@ def init_static_mono_leds():
 #  DAW command buttons (toggle states refresh on OnRefresh)
 # ---------------------------------------------------------------------------
 
-def update_daw_command_leds():
-    """Toggle states: 30% off / 100% on; mode/action buttons: always 100%."""
+def update_daw_command_leds(state=None):
+    """Toggle states: 30% off / 100% on; mode/action buttons: always 100%.
+
+    state: optional KeyLabState — used to read overdub_enabled (FL has no getter).
+    """
     _mono_toggle(_LED_METRO, ui.isMetronomeEnabled())
-    _mono_toggle(_LED_OUT, ui.isLoopRecEnabled())
+    # Overdub: On=100%, Off=~3%. We track this ourselves since FL has no getter.
+    if state is not None:
+        _set_mono(_LED_OUT, _VAL_ON if state.overdub_enabled else _VAL_3_PERCENT)
+    # else: leave OUT LED as-is (no state available, avoid guessing)
 
     _mono_always_on(_LED_SAVE)
     _mono_always_on(_LED_IN)
@@ -267,9 +273,8 @@ def update_daw_command_leds():
         # Solo button represents NewPattern (one-shot, always on)
         _mono_always_on(_LED_TRACK_SOLO)
         
-        # Mute button toggles pattern/song mode now
-        is_pattern = transport.getLoopMode() == 1
-        _set_mono(_LED_TRACK_MUTE, _VAL_ON if is_pattern else _VAL_3_PERCENT)
+        # Mute button toggles Piano Roll: 100% open / 3% closed
+        _set_mono(_LED_TRACK_MUTE, _VAL_ON if ui.getFocused(midi.widPianoRoll) else _VAL_3_PERCENT)
     except Exception:
         pass
 
@@ -384,7 +389,7 @@ def update_all_feedback(state, beat_value=None):
     """Full LED sync on OnInit (no pad RGB — Forward script only)."""
     update_transport_leds(beat_value)
     init_static_mono_leds()
-    update_daw_command_leds()
+    update_daw_command_leds(state)
     if state is not None:
         update_track_button_leds(state)
 
@@ -392,7 +397,7 @@ def update_all_feedback(state, beat_value=None):
 def update_refresh_feedback(state, flags=0):
     """Lighter OnRefresh: transport + DAW toggles; always schedule track RGB update."""
     update_transport_leds()
-    update_daw_command_leds()
+    update_daw_command_leds(state)
     if state is None:
         return
     # Always schedule a track LED update — jog scrolling triggers OnRefresh

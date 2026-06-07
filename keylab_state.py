@@ -99,6 +99,11 @@ class KeyLabState:
         self.last_plugin_name = ""     # Cache: last detected plugin name
         self.plugin_encoder_values = [0.0] * 8  # Current values for relative encoders
 
+        # --- Overdub ---
+        # FL has no isOverdubEnabled() getter, so we track state ourselves.
+        # Toggled in keylab_daw_commands._do_toggle_overdub; read by keylab_feedback.
+        self.overdub_enabled = False
+
     # ------------------------------------------------------------------
     #  Pad state — delegated to keylab_shared_state for cross-port sharing
     # ------------------------------------------------------------------

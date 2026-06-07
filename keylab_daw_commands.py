@@ -1,10 +1,11 @@
 # KeyLab mkII — DAW Commands Handler
-# Handles: Snap, NewPattern, FocusMixer, Undo/Cut, Metronome, Overdub, TapTempo, Redo
+# Handles: Snap, NewPattern, PianoRoll, Redo/Cut, Metronome, Overdub, TapTempo, Undo
 # Phase 6 — see ROADMAP.md
 
 import general
 import midi
 import patterns
+import time
 import transport
 import ui
 
@@ -49,7 +50,7 @@ def handle_daw_commands(event, state, pages):
 
     if event.data1 == TrackControl.MUTE:
         if event.data2 > 0:
-            _do_toggle_pattern_song(event, pages)
+            _do_toggle_piano_roll(event, pages)
         return True
 
     if event.data1 == TrackControl.READ:
@@ -59,7 +60,7 @@ def handle_daw_commands(event, state, pages):
 
     if event.data1 == TrackControl.WRITE:
         if event.data2 > 0:
-            long_press.begin('write_btn', on_long=lambda: _do_cut(pages), on_short=lambda: _do_undo(pages))
+            long_press.begin('write_btn', on_long=lambda: _do_cut(pages), on_short=lambda: _do_redo(pages))
         else:
             long_press.release('write_btn')
         return True
@@ -67,7 +68,7 @@ def handle_daw_commands(event, state, pages):
     # Global Controls (Row 2 buttons)
     if event.data1 == GlobalControl.SAVE:
         if event.data2 > 0:
-            _do_toggle_browser_cr(pages)
+            _do_cycle_browser_cr_mixer(pages)
         return True
 
     if event.data1 == GlobalControl.IN:
@@ -79,7 +80,9 @@ def handle_daw_commands(event, state, pages):
 
     if event.data1 == GlobalControl.OUT:
         if event.data2 > 0:
-            _do_toggle_overdub(event, pages)
+            _do_overdub_press(state, pages)
+        else:
+            _do_overdub_release()
         return True
 
     if event.data1 == GlobalControl.METRO:
@@ -89,7 +92,7 @@ def handle_daw_commands(event, state, pages):
 
     if event.data1 == GlobalControl.UNDO:
         if event.data2 > 0:
-            _do_redo(event, pages)
+            _do_undo(pages)
         return True
 
     # Live/Bank modifier buttons for pad bank navigation (only in Chromatic mode)
@@ -165,12 +168,16 @@ def _do_tap_tempo(event, pages):
     update_daw_command_leds()
 
 
-def _do_toggle_browser_cr(pages):
-    """Toggle focus between Channel Rack and Browser."""
+def _do_cycle_browser_cr_mixer(pages):
+    """3-way toggle: Browser → Channel Rack → Mixer → Browser …"""
     if ui.getFocused(midi.widBrowser):
         ui.showWindow(midi.widChannelRack)
         ui.setFocused(midi.widChannelRack)
         _show_hint(pages, "Channel Rack")
+    elif ui.getFocused(midi.widChannelRack):
+        ui.showWindow(midi.widMixer)
+        ui.setFocused(midi.widMixer)
+        _show_hint(pages, "Mixer")
     else:
         ui.showWindow(midi.widBrowser)
         ui.setFocused(midi.widBrowser)
@@ -201,8 +208,26 @@ def _do_track_mute(event, pages):
         _show_hint(pages, "Mute Channel")
 
 
+def _do_toggle_piano_roll(event, pages):
+    """Toggle Piano Roll open/close for the currently selected channel.
+    
+    If Piano Roll is currently focused → close it (switch focus to Channel Rack).
+    Otherwise → open Piano Roll.
+    LED reflects state via update_daw_command_leds (100% open / 3% closed).
+    """
+    if ui.getFocused(midi.widPianoRoll):
+        ui.showWindow(midi.widChannelRack)
+        ui.setFocused(midi.widChannelRack)
+        _show_hint(pages, "Piano Roll off")
+    else:
+        ui.showWindow(midi.widPianoRoll)
+        ui.setFocused(midi.widPianoRoll)
+        _show_hint(pages, "Piano Roll")
+    update_daw_command_leds()
+
+
 def _do_toggle_pattern_song(event, pages):
-    """Toggle between Pattern and Song mode."""
+    """Toggle between Pattern and Song mode (kept for reference)."""
     new_mode = 1 if not transport.getLoopMode() else 0
     transport.setLoopMode(new_mode)
     mode_str = "Pattern" if new_mode else "Song"
@@ -211,9 +236,15 @@ def _do_toggle_pattern_song(event, pages):
 
 
 def _do_undo(pages):
-    """Short press on Write = Undo."""
+    """Undo button (GlobalControl.UNDO) = Undo."""
     general.undoUp()
     _show_hint(pages, "Undo")
+
+
+def _do_redo(pages):
+    """Short press on Write = Redo."""
+    general.undoDown()
+    _show_hint(pages, "Redo")
 
 
 def _do_cut(pages):
@@ -259,11 +290,44 @@ def _do_toggle_pad_velocity(state, pages):
     print("Pad velocity -> %s (shared state + file)" % label)
 
 
-def _do_toggle_overdub(event, pages):
-    """Toggle overdub/loop record mode."""
+# ---------------------------------------------------------------------------
+#  Overdub — press/release pair + debounce
+# ---------------------------------------------------------------------------
+
+_OVERDUB_DEBOUNCE_MS = 200.0  # Minimum ms between toggles (prevents HW bounce)
+_overdub_last_press_ms = 0.0
+
+
+def _do_overdub_press(state, pages):
+    """Note On: toggle overdub state + send FPT_Overdub press signal.
+
+    FL Studio's globalTransport treats FPT_Overdub like a held button —
+    it needs both press (value=1) AND release (value=0) to confirm the
+    action reliably. Without the release, FL queues the command but may
+    ignore it or fire it twice on the next unrelated event.
+
+    A 200ms debounce prevents hardware button-bounce double-fires.
+    """
+    global _overdub_last_press_ms
+    now_ms = time.monotonic() * 1000.0
+    if now_ms - _overdub_last_press_ms < _OVERDUB_DEBOUNCE_MS:
+        return  # Debounce: discard bounce / repeated press within window
+    _overdub_last_press_ms = now_ms
+
+    state.overdub_enabled = not state.overdub_enabled
     transport.globalTransport(midi.FPT_Overdub, 1)
-    _show_hint(pages, "Overdub")
-    update_daw_command_leds()
+    label = "Overdub On" if state.overdub_enabled else "Overdub Off"
+    _show_hint(pages, label)
+    update_daw_command_leds(state)
+
+
+def _do_overdub_release():
+    """Note Off: send FPT_Overdub release signal (value=0).
+
+    This completes the press/release pair that FL Studio expects for
+    globalTransport toggle commands to process cleanly.
+    """
+    transport.globalTransport(midi.FPT_Overdub, 0)
 
 
 def _do_toggle_metronome(event, pages):
@@ -273,10 +337,6 @@ def _do_toggle_metronome(event, pages):
     update_daw_command_leds()
 
 
-def _do_redo(event, pages):
-    """Redo last undone action."""
-    general.undoDown()
-    _show_hint(pages, "Redo")
 
 
 def _do_pad_bank_prev(event, state, pages):

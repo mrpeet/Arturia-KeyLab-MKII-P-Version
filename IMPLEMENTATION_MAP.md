@@ -33,9 +33,9 @@
 |:---            |:---     |:---   |:---             |:---                                     |:---    |
 | Record (Reihe 1) | Note On | 0  | SnapToggle      | `ui.snapOnOff`                          | fertig |
 | Solo           | Note On | 8     | NewPattern      | `patterns.findFirstNextEmptyPat`        | fertig |
-| Mute           | Note On | 16    | TogglePatternSong | `transport.setLoopMode` (toggle)        | fertig |
+| Mute           | Note On | 16    | OpenPianoRoll   | `ui.showWindow(widPianoRoll)` + `channels.showEditor` | fertig |
 | Read           | Note On | 74    | TapTempo        | `transport.globalTransport(FPT_TapTempo)` | fertig |
-| Write          | Note On | 75    | Undo/Cut        | Short=`general.undoUp` Long=`ui.cut`      | fertig |
+| Write          | Note On | 75    | Redo/Cut        | Short=`general.undoDown` Long=`ui.cut`    | fertig |
 
 ---
 
@@ -43,11 +43,11 @@
 
 | Hardware-Label | Typ     | Data1 | Funktion            | FL API / Logik                                     | Status |
 |:---            |:---     |:---   |:---                 |:---                                                |:---    |
-| Save           | Note On | 80    | ToggleBrowserCR     | `ui.showWindow` toggle (Browser/CR)                 | fertig |
+| Save           | Note On | 80    | CycleBrowserCRMixer | `ui.showWindow` 3-way (Browser→CR→Mixer) | fertig |
 | In             | Note On | 87    | TogglePadMode       | Short: Drum Map ↔ Chromatic; Long: Pad Velocity On/Off | fertig |
 | Out            | Note On | 88    | ToggleOverdub       | `transport.globalTransport(FPT_Overdub)`           | fertig |
 | Metro          | Note On | 89    | MetronomeToggle     | `transport.globalTransport(FPT_Metronome)`         | fertig |
-| Undo           | Note On | 81    | Redo                | `general.undoDown`                                 | fertig |
+| Undo           | Note On | 81    | Undo                | `general.undoUp`                                   | fertig |
 | Live/Bank+Part2 | Note On | 46 | Pad bank prev       | `pad_bank_offset` (beide Pad-Modi)                   | fertig |
 | Live/Bank+Part1 | Note On | 47 | Pad bank next       | `pad_bank_offset` (beide Pad-Modi)                   | fertig |
 
@@ -162,7 +162,7 @@ Spezifikation: [`CONTROLLER_RULES.md`](CONTROLLER_RULES.md). Code: `keylab_feedb
 | Bereich | Regel | Status |
 |:---|:---|:---|
 | Transport | Play/Stop/Record/Loop + Beat blink | fertig |
-| DAW Commands | Toggle 30%/100%; Save/IN/Undo/Tap immer 100% | fertig |
+| DAW Commands | Toggle 30%/100%; Save/IN/Undo/Tap immer 100%; Overdub On=100%/Off=3% | fertig |
 | Navigation | Bank L/R, Jog click immer 100% | fertig |
 | Part Prev/Next (48/49) | immer 100% | fertig |
 | Track Buttons 24–31 | Muted off; 20% / 100% FL-Farbe | fertig |
