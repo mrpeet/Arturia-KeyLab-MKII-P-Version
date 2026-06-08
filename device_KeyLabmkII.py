@@ -37,6 +37,7 @@ from keylab_feedback import (
     tick_feedback_idle,
     update_track_button_leds,
     clear_all_leds,
+    clear_led_caches,
 )
 import keylab_long_press
 
@@ -51,8 +52,7 @@ _state = None       # type: KeyLabState
 _display = None     # type: KeyLabDisplay
 _pages = None       # type: KeyLabPagedDisplay
 
-_boot_time_ms = 0.0
-_boot_leds_refreshed = False
+_is_fully_initialized = False
 
 
 # ---------------------------------------------------------------------------
@@ -60,13 +60,12 @@ _boot_leds_refreshed = False
 # ---------------------------------------------------------------------------
 
 def OnInit():
-    global _state, _display, _pages, _boot_time_ms, _boot_leds_refreshed
+    global _state, _display, _pages, _is_fully_initialized
     _state = KeyLabState()
     _display = KeyLabDisplay()
     _pages = KeyLabPagedDisplay(_display)
     
-    _boot_time_ms = time.monotonic() * 1000.0
-    _boot_leds_refreshed = False
+    _is_fully_initialized = False
 
     print("### INIT KEYLAB mkII P Version ###")
 
@@ -77,9 +76,23 @@ def OnInit():
     _pages.SetActivePage('main')
 
     reset_fader_state(_state)
-    update_all_feedback(_state)
 
     print("### KeyLab mkII P Version ready ###")
+
+
+def _ensure_initialized():
+    """Run full initialization feedback on first contact (Lazy Initialization)."""
+    global _is_fully_initialized
+    if not _is_fully_initialized and _state is not None:
+        clear_led_caches()
+        update_all_feedback(_state)
+        # Resend welcome message to ensure it displays if missed during boot
+        _pages.SetPageLines('welcome', line1='KeyLab mkII', line2='DAW Mode Ready')
+        _pages.SetActivePage('welcome', expires=1500)
+        _pages.SetActivePage('main')
+        _pages.Refresh()
+        _is_fully_initialized = True
+        print("Lazy initialization completed.")
 
 
 def OnDeInit():
@@ -94,6 +107,8 @@ def OnMidiMsg(event):
     Order: Free Encoder (modifies to absolute) → Transport → DAW Commands → Navigation → Plugin → Mixer
     First handler that returns True wins; unhandled events are logged.
     """
+    _ensure_initialized()
+
     if _DEBUG_MIDI and event.midiId == midi.PITCH_BEND_STATUS:
         print("DEBUG: Fader chan=%d data1=%d data2=%d" % (event.midiChan, event.data1, event.data2))
 
@@ -171,12 +186,6 @@ def OnDirtyChannel(index, flag):
 
 
 def OnIdle():
-    global _boot_leds_refreshed
-    if not _boot_leds_refreshed and _state is not None:
-        if (time.monotonic() * 1000.0) - _boot_time_ms > 1500.0:
-            update_all_feedback(_state)
-            _boot_leds_refreshed = True
-
     _pages.Refresh()
     keylab_long_press.poll()
     _update_plugin_mode()
@@ -191,6 +200,17 @@ def OnUpdateBeatIndicator(value):
 
 
 def OnSysEx(event):
+    # Detect Arturia "DAW Mode activated" or Boot SysEx (F0 00 20 6B 7F 42 02 00 00 15 00 F7)
+    if event.sysex == b'\xf0\x00 k\x7fB\x02\x00\x00\x15\x00\xf7' or event.sysex == bytes([0xF0, 0x00, 0x20, 0x6B, 0x7F, 0x42, 0x02, 0x00, 0x00, 0x15, 0x00, 0xF7]):
+        print("Received Arturia DAW Mode SysEx. Triggering initialization.")
+        global _is_fully_initialized
+        _is_fully_initialized = False
+        _ensure_initialized()
+        event.handled = True
+        return
+
+    _ensure_initialized()
+
     # Swallow inbound SysEx to avoid feedback / re-detection loops
     if _DEBUG_MIDI:
         print("DEBUG SysEx: " + str(event.sysex)[:50] + "...")

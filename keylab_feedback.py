@@ -435,10 +435,14 @@ def flush_track_leds_if_ready(state):
         update_track_button_leds(state)
 
 
-def clear_all_leds():
-    """Turn off all LEDs (used in OnDeInit)."""
+def clear_led_caches():
+    """Clear LED caches to force a full hardware update on the next feedback pass."""
     global _static_mono_inited
     _mono_cache.clear()
     _rgb_cache.clear()
     _static_mono_inited = False
+
+def clear_all_leds():
+    """Turn off all LEDs (used in OnDeInit)."""
+    clear_led_caches()
     send_to_device(bytes([0x02, 0x7D, 0x7D, 0x0B, 0x00]))
