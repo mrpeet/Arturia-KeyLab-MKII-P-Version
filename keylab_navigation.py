@@ -129,9 +129,9 @@ def _do_jog(event, pages, state):
 def _do_jog_click(event, pages):
     """Jog push: context-sensitive window action."""
     if ui.getFocused(midi.widChannelRack):
-        # Channel Rack → open plugin editor for selected channel
-        channels.showEditor(channels.channelNumber(), 1)
-        _show_hint(pages, "Open Plugin")
+        # Channel Rack → open channel settings for selected channel
+        channels.showCSForm(channels.channelNumber(), 1)
+        _show_hint(pages, "Open Channel")
 
     elif ui.getFocused(midi.widPlugin):
         # Plugin open → close it, return to Channel Rack
