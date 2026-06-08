@@ -23,6 +23,7 @@
 #
 # Shares state with device_KeyLabmkII.py via keylab_shared_state (sys + file).
 
+import time
 import ui
 import midi
 import device
@@ -31,10 +32,10 @@ import keylab_shared_state as pad_state
 
 from keylab_config import Pad
 from keylab_pad_leds import (
-    pad_index_from_note,
-    set_pad_color,
-    refresh_all_pads_idle,
+    restore_mcc_pads,
     clear_pad_leds,
+    trigger_mode_animation,
+    tick_animation,
 )
 
 # Debug pad transposition in FL Script Output (set False when stable)
@@ -151,7 +152,7 @@ def _apply_pad_velocity(event, note_on_before_transpose):
 def OnInit():
     print("### INIT KeyLab mkII Forward (Port 0) ###")
     print("### Pad mode: %s (file+sys sync) ###" % pad_state.get_pad_mode())
-    refresh_all_pads_idle()
+    restore_mcc_pads()
 
 
 def OnDeInit():
@@ -159,8 +160,12 @@ def OnDeInit():
 
 
 def OnIdle():
+    # Mode-change signal from DAW script
     if pad_state.consume_pad_led_dirty():
-        refresh_all_pads_idle()
+        trigger_mode_animation(pad_state.get_pad_mode())
+        
+    # Update animation fading
+    tick_animation()
 
 
 def OnMidiIn(event):
@@ -174,15 +179,6 @@ def OnMidiIn(event):
 
         _transpose_pad(event)
         _apply_pad_velocity(event, note_on)
-        pad_idx = pad_index_from_note(old_note)
-        
-        if pad_idx is not None:
-            if note_on:
-                set_pad_color(pad_idx, event.data2)
-            elif is_aftertouch:
-                set_pad_color(pad_idx, event.data2)
-            elif is_note_off:
-                set_pad_color(pad_idx, 0)
                 
         if _DEBUG_PADS:
             print("Pad: mode=%s bank=%d vel=%s ch=%d note %d->%d vel=%d status %d->%d" % (
