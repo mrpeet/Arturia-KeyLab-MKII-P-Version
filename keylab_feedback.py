@@ -247,7 +247,7 @@ def update_daw_command_leds(state=None):
 
     state: optional KeyLabState — used to read overdub_enabled (FL has no getter).
     """
-    _mono_toggle(_LED_METRO, ui.isMetronomeEnabled())
+    _set_mono(_LED_METRO, _VAL_ON if ui.isMetronomeEnabled() else _VAL_3_PERCENT)
     # Overdub: On=100%, Off=~3%. We track this ourselves since FL has no getter.
     if state is not None:
         _set_mono(_LED_OUT, _VAL_ON if state.overdub_enabled else _VAL_3_PERCENT)
