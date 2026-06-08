@@ -41,8 +41,8 @@ from keylab_pad_leds import (
 # Debug pad transposition in FL Script Output (set False when stable)
 _DEBUG_PADS = False
 
-# Chromatic layout starts at C3 (user spec); Drum Map uses GM drums on channel 10
-_CHROMATIC_BASE = 48  # MIDI note C3
+# Chromatic layout starts at Note 20 (Bank 0); Drum Map uses GM drums on channel 10
+_CHROMATIC_BASE = 20  # MIDI note 20
 _PAD_VELOCITY_FIXED = 95  # 75% of MIDI 127 when velocity is disabled
 
 # Status bytes
@@ -53,14 +53,6 @@ _POLY_AFTERTOUCH_CH10 = 0xA0 + Pad.PAD_CHANNEL # 0xA9
 _NOTE_ON_CH1 = 0x90
 _NOTE_OFF_CH1 = 0x80
 _POLY_AFTERTOUCH_CH1 = 0xA0
-
-# FPC_MAP: native pad note -> GM Drum note (channel 10)
-_FPC_MAP = {
-    36: 49, 37: 55, 38: 51, 39: 53,
-    40: 48, 41: 47, 42: 45, 43: 43,
-    44: 40, 45: 38, 46: 46, 47: 44,
-    48: 37, 49: 36, 50: 42, 51: 54,
-}
 
 V_COLLECTION = {
     'Analog Lab V',
@@ -134,10 +126,10 @@ def _transpose_pad(event):
         event.data1 = max(0, min(127, new_note))
         _set_melodic_channel(event, note_on, is_aftertouch)
     else:
-        mapped = _FPC_MAP.get(note)
-        if mapped is None:
-            return
-        event.data1 = max(0, min(127, mapped + bank * 16))
+        # Drum Map: GM Drums. Native hardware pads send 36-51.
+        # Bank 1 should give 36-51, so we subtract 16 for bank offset
+        new_note = note + (bank - 1) * 16
+        event.data1 = max(0, min(127, new_note))
         # Stay on channel 10 for GM drums
 
 

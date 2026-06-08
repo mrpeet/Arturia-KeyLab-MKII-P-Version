@@ -19,7 +19,7 @@
 import os
 import sys as _sys
 
-PAD_BANK_COUNT = 6
+PAD_BANK_COUNT = 8
 
 PAD_MODE_FPC = 'fpc'
 PAD_MODE_CHROMATIC = 'chromatic'
@@ -27,7 +27,7 @@ PAD_MODE_CHROMATIC = 'chromatic'
 _KEY = '_keylab_pad_state'
 _DEFAULTS = {
     'pad_mode': PAD_MODE_CHROMATIC,
-    'pad_bank_offset': 0,
+    'pad_bank_offset': 4,
     'pad_velocity_enabled': True,
     'pad_led_dirty': False,
 }
@@ -101,7 +101,7 @@ def _write_file_state(data):
     try:
         with open(path, 'w') as f:
             f.write('pad_mode=%s\n' % data.get('pad_mode', PAD_MODE_CHROMATIC))
-            f.write('pad_bank_offset=%d\n' % int(data.get('pad_bank_offset', 0)))
+            f.write('pad_bank_offset=%d\n' % int(data.get('pad_bank_offset', 4)))
             vel = data.get('pad_velocity_enabled', True)
             f.write('pad_velocity_enabled=%d\n' % (1 if vel else 0))
             dirty = data.get('pad_led_dirty', False)

@@ -276,10 +276,13 @@ def _do_toggle_pad_mode(state, pages):
     """Toggle between Drum Map (GM drums, ch10) and Chromatic (C3+, ch1)."""
     if state.pad_mode == pad_state.PAD_MODE_FPC:
         state.pad_mode = pad_state.PAD_MODE_CHROMATIC
-        _show_hint(pages, "Pads: Chromatic")
+        state.pad_bank_offset = 4  # Default for Chromatic (C5)
+        pages.SetPageLines('padmode', line1='Pads: Chromatic', line2='Bank 4')
     else:
         state.pad_mode = pad_state.PAD_MODE_FPC
-        _show_hint(pages, "Pads: Drum Map")
+        state.pad_bank_offset = 1  # Default for Drum Map (Bank 1 = note 36)
+        pages.SetPageLines('padmode', line1='Pads: Drum Map', line2='Bank 1')
+    pages.SetActivePage('padmode', expires=1500)
     pad_state.mark_pad_led_dirty()
     print("Pad mode -> %s (shared state + file)" % state.pad_mode)
 
@@ -357,11 +360,11 @@ def _do_pad_bank_next(event, state, pages):
 
 def _show_pad_bank_hint(state, pages):
     """Show pad bank number and note range on display."""
-    # Chromatic range starts at C3 (48); Drum Map uses GM drum notes in same span
-    base_low = 48 + state.pad_bank_offset * 16
-    base_high = 48 + 15 + state.pad_bank_offset * 16
+    # Both modes align on Note 20 + bank * 16 for Pad 1
+    base_low = 20 + state.pad_bank_offset * 16
+    base_high = 20 + 15 + state.pad_bank_offset * 16
     note_range = "(%s-%s)" % (_note_to_name(base_low), _note_to_name(base_high))
-    pages.SetPageLines('padbank', line1='Pads: Bank %d' % (state.pad_bank_offset + 1), line2=note_range)
+    pages.SetPageLines('padbank', line1='Pads: Bank %d' % state.pad_bank_offset, line2=note_range)
     pages.SetActivePage('padbank', expires=1500)
 
 
