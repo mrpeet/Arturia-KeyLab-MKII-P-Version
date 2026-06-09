@@ -10,7 +10,7 @@ Cross-cutting behaviour for UI, timing, and LEDs. Implementation lives in the Py
 | Long press action | Fire **on threshold** (while held), not on release | `keylab_long_press.poll()` in `OnIdle` |
 | Short press | On button **release** if long did not fire | `keylab_long_press.release()` |
 
-## LCD hints
+## LCD Hints
 
 | Control | Short | Long |
 |---------|-------|------|
@@ -35,13 +35,13 @@ SysEx: `F0 00 20 6B 7F 42 02 00 10 <led_id> <value> F7` via `send_to_device()`.
 
 SysEx: `02 00 16 <id> <R> <G> <B> 0x7F`.
 
-FL color is BGR in `getTrackColor` / `getChannelColor`. Scale with brightness 0.0–1.0, clamp to 0–127.
+FL colour is BGR in `getTrackColor` / `getChannelColor`. Scale with brightness 0.0–1.0, clamp to 0–127.
 
 ### Pads (`keylab_shared_state.pad_mode`)
 
-| Mode | Default | Color |
-|------|---------|-------|
-| Chromatic | yes | **White** |
+| Mode | Default | Colour |
+|------|---------|--------|
+| Chromatic | **yes** | **White** |
 | Drum Map (`fpc`) | no | **Purple** |
 
 | State | Brightness | Code |
@@ -50,30 +50,39 @@ FL color is BGR in `getTrackColor` / `getChannelColor`. Scale with brightness 0.
 | Pressed | **50% → 100%** by MIDI velocity | `set_pad_color(pad_index, velocity)` on Keys port |
 | Release | back to 50% idle | `set_pad_color(pad_index, 0)` |
 
-Pad RGB **only** on Keys port: **`device_KeyLabmkII_Forward.py`** (`OnMidiIn` press/release, `OnInit` idle). MCC: set all pads to **Off** (not “Light when triggered” — that is firmware blue).
+Pad RGB **only** on Keys port: **`device_KeyLabmkII_Forward.py`** (`OnMidiIn` press/release, `OnInit` idle). MCC: set all pads to **Off** (not "Light when triggered" — that is firmware blue).
 
-DAW script sets `pad_led_dirty` after IN (pad mode); Forward `OnIdle` refreshes idle colors once.
+DAW script sets `pad_led_dirty` after IN (pad mode); Forward `OnIdle` refreshes idle colours once.
 
 **LED slot:** `Pad.NOTE_TO_LED_SLOT` in [`keylab_config.py`](keylab_config.py) — vertical flip vs `Pad.NOTES` (Pad 1 → LED index 12 on hardware). Do **not** use `note - 36`.
 
 **Nav / Part Prev/Next:** mono LEDs set once on init (`0x62`/`0x63` nav, `0x1A`/`0x1B` part per archive). Track buttons 24–31: 0% / 20% / 100% when selection changes only.
+
+### Pad Banking
+
+| Mode | Banks | Default bank | Chromatic base | Pad 1 default note |
+|------|-------|-------------|---------------|-------------------|
+| Chromatic | 0–7 | **4** | MIDI 20 | 20 + 0 + 4×16 = **84 (C5)** |
+| Drum Map | 0–7 | **1** | native 36 + (bank−1)×16 | 36 + 0 = **36 (C1/GM)** |
+
+Bank offsets are stored separately per mode in `keylab_shared_state.py` and restored on toggle.
 
 ### Track buttons (notes 24–31, slots 1–8)
 
 | State | Brightness |
 |-------|------------|
 | Muted | **0%** (RGB off) |
-| In bank, not selected | **20%** of FL color |
-| Selected (focused) | **100%** of FL color |
+| In bank, not selected | **20%** of FL colour |
+| Selected (focused) | **100%** of FL colour |
 
-Color source: `mixer.getTrackColor` (Mixer focus) or `channels.getChannelColor` (Channel Rack).  
+Colour source: `mixer.getTrackColor` (Mixer focus) or `channels.getChannelColor` (Channel Rack).  
 Refresh: `OnRefresh`, throttled `OnIdle` (~80 ms), after jog / bank change.
 
-## LED ID map (mono)
+## LED ID Map (mono)
 
 Documented in `keylab_feedback.py` (from `_archive/KeyLabmk2Return.py`). Part Prev/Next IDs (`0x50`/`0x51`) may need hardware verification.
 
-## Related docs
+## Related Docs
 
 - [ROADMAP.md](ROADMAP.md) — phases 10–13
 - [USERGUIDE.md](USERGUIDE.md) — user-facing behaviour

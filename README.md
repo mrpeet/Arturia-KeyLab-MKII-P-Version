@@ -2,105 +2,113 @@
 
 Custom FL Studio user MIDI script for the **Arturia KeyLab mkII** keyboard controller. Provides transport control, mixer integration (faders, encoders, track buttons), pad modes, navigation, display feedback, and more.
 
-> **Status:** 🚧 Neustrukturierung in Arbeit — das Script wird aktuell modular neu aufgebaut. Das alte Script ist voll funktionsfähig, wird aber schrittweise durch eine saubere, modulare Version ersetzt.
+> **Status:** 🚧 Modular rebuild in progress — Phases 1–11 complete. Phase 12 (LED polish) and Phase 13 (edge cases) are next.
 
 ---
 
-## Credits & Lizenz
+## Credits & License
 
-Dieses Projekt basiert auf Arbeit mehrerer Entwickler:
+This project is based on the work of several developers:
 
-### Ray Juang — Hauptautor (MIT License, 2020)
-- **Basis:** [github.com/rjuang/flstudio-arturia-keylab-mk2](https://github.com/rjuang/flstudio-arturia-keylab-mk2)
-- **Portiert nach:** `keylab_dispatch.py`, `keylab_display.py`, `keylab_pages.py`
-- Architektur, Event-Dispatcher, LCD-SysEx, Scrolling, Timed-Page-Manager, Plugin-Steuerung, Encoder/Slider-Logik
-- Lizenz: MIT License — Copyright (c) 2020 Ray Juang
+### Ray Juang — Original author (MIT License, 2020)
+- **Base:** [github.com/rjuang/flstudio-arturia-keylab-mk2](https://github.com/rjuang/flstudio-arturia-keylab-mk2)
+- **Ported to:** `keylab_dispatch.py`, `keylab_display.py`, `keylab_pages.py`
+- Architecture, event dispatcher, LCD SysEx, scrolling, timed-page-manager, plugin control, encoder/slider logic
+- License: MIT License — Copyright (c) 2020 Ray Juang
 
-### Farès MEZDOUR — Anpassungen (Arturia)
-- **Dateien:** siehe `_archive/` — Anpassungen am Original-Script
-- Plugin-Mapping-Tabellen (FLEX, Sytrus, Harmor etc.), LED-Feedback, Step-Sequencer-Integration
+### Farès MEZDOUR — Adaptations (Arturia)
+- **Files:** see `_archive/` — adaptations to the original script
+- Plugin mapping tables (FLEX, Sytrus, Harmor etc.), LED feedback, step sequencer integration
 
-### P Version — Neustrukturierung
-- Modulare Neufassung mit sauberer Architektur
-- Bestandsaufnahme, Dokumentation und API-Verifikation
-- Eigene Feature-Planung und Implementierung
+### P Version — Modular rebuild
+- Complete modular rewrite with clean architecture
+- Inventory, documentation and API verification
+- Own feature planning and implementation
 
 ---
 
 ## Setup
 
-### Voraussetzungen
-- **FL Studio** (mit MIDI Scripting Support)
-- **Arturia KeyLab mkII** (im DAW-Modus / MCU-Modus)
+### Requirements
+- **FL Studio** (with MIDI scripting support)
+- **Arturia KeyLab mkII** (in DAW mode / MCU mode)
 
 ### Installation
-1. Diesen gesamten Ordner nach folgendem Pfad kopieren:
+1. Copy this entire folder to:
    ```
    [FL Studio User Data]\Settings\Hardware\Arturia KeyLab MKII P Version\
    ```
-   Typischer Pfad unter Windows:
+   Typical path on Windows:
    ```
    Documents\Image-Line\FL Studio\Settings\Hardware\Arturia KeyLab MKII P Version\
    ```
 
-2. FL Studio öffnen → **Options → MIDI Settings**
+2. Open FL Studio → **Options → MIDI Settings**
 
-3. Zwei MIDI-Inputs zuweisen:
+3. Assign two MIDI inputs:
 
-   | FL Studio Input | Hardware-Name | Script | Port |
+   | FL Studio Input | Hardware name | Script | Port |
    |:----------------|:--------------|:-------|:-----|
    | `MIDIIN2 (KeyLab mkII 61)` | DAW Port | **KeyLab mkII P Version (MIDIIN2 · Port 1)** | 1 |
-   | `KeyLab mkII 61` | Keys Port | **KeyLab mkII Forward (KeyLab mkII 61 · Port 0)** *(optional — nur für V-Collection)* | 0 |
+   | `KeyLab mkII 61` | Keys Port | **KeyLab mkII Forward (KeyLab mkII 61 · Port 0)** *(optional — only for V-Collection + pad transposition)* | 0 |
 
 ---
 
-## Dateistruktur
+## File Structure
 
-### Python-Scripts (neu — modulare Struktur)
+### Python scripts (new — modular structure)
 
-| Datei | Rolle | Status |
-|:------|:------|:-------|
-| `device_KeyLabmkII.py` | FL Callbacks / Entry Point + Dispatcher-Kette | ✅ Phase 5 |
-| `device_KeyLabmkII_Forward.py` | V-Collection CC-Forwarding (Keys Port, **optional**) | ✅ Fertig |
-| `keylab_config.py` | Hardware-Konstanten (Note/CC/PB aus `hardware_map.md`) | ✅ Fertig |
-| `keylab_state.py` | Zentraler State (Modes, Banking, Pickup) | ✅ Fertig |
-| `keylab_dispatch.py` | Event-Dispatcher + `send_to_device` (SysEx) | ✅ Portiert |
-| `keylab_display.py` | LCD SysEx-Builder mit Scrolling | ✅ Portiert |
-| `keylab_pages.py` | Timed-Page-Manager für das Display | ✅ Portiert |
-| `keylab_transport.py` | Transport-Handler (Play/Stop/Record/Loop/RW/FF) | ✅ Phase 5 |
-| `keylab_mixer.py` | Mixer-Handler (Fader/Encoder/Buttons/Banks) | ⬜ Stub |
-| `keylab_navigation.py` | Jog/Arrows/Window-Switching | ⬜ Stub |
-| `keylab_daw_commands.py` | DAW Command Buttons (Snap/Undo/Metro/Redo...) | ✅ Phase 6 |
-| `keylab_feedback.py` | LED- und Pad-Feedback (Transport LEDs) | ✅ Phase 5 |
+| File | Role | Status |
+|:-----|:-----|:-------|
+| `device_KeyLabmkII.py` | FL callbacks / entry point + dispatcher chain | ✅ Phases 5–10 |
+| `device_KeyLabmkII_Forward.py` | Keys port: pad transposition + V-Collection CC forwarding | ✅ Phase 11 |
+| `keylab_config.py` | Hardware constants (Note/CC/PB from `hardware_map.md`) | ✅ Done |
+| `keylab_state.py` | Central state (modes, banking, pickup) | ✅ Done |
+| `keylab_shared_state.py` | Cross-port pad state (mode, bank, velocity) — file + sys | ✅ Phase 10.1 |
+| `keylab_dispatch.py` | Event dispatcher + `send_to_device` (SysEx) | ✅ Ported |
+| `keylab_display.py` | LCD SysEx builder with scrolling | ✅ Ported |
+| `keylab_pages.py` | Timed-page manager for the display | ✅ Ported |
+| `keylab_transport.py` | Transport handler (Play/Stop/Record/Loop/RW/FF) | ✅ Phase 5 |
+| `keylab_mixer.py` | Mixer handler (fader/encoder/buttons/banks) | ✅ Phases 8–9 |
+| `keylab_navigation.py` | Jog / arrows / window switching | ✅ Phase 7 |
+| `keylab_daw_commands.py` | DAW command buttons (Snap/Undo/Metro/Redo…) | ✅ Phase 6 |
+| `keylab_feedback.py` | LED and pad feedback | ✅ Phases 5, 8, 11 |
+| `keylab_pad_leds.py` | Pad LED colours and animations | ✅ Phase 11 |
+| `keylab_plugin.py` | Plugin encoder control | ✅ Phase 10 |
+| `plugin_database.py` | 309 plugin parameter mappings | ✅ Phase 4 |
+| `user_defined_plugin_mappings.py` | User-defined plugin mappings | ✅ Phase 4 |
 
-### Archiv (Referenz für Portierung)
+### Archive (reference for porting)
 
-| Ordner | Inhalt |
-|:-------|:-------|
-| `_archive/` | Alle 14 Original-`.py`-Dateien des alten Scripts (Farès MEZDOUR + Ray Juang) |
+| Folder | Contents |
+|:-------|:---------|
+| `_archive/` | All 14 original `.py` files of the old script (Farès MEZDOUR + Ray Juang) |
 
-### Dokumentation
+### Documentation
 
-| Datei | Inhalt |
-|:------|:-------|
-| [`architecture.md`](architecture.md) | Modul-Abhängigkeiten, Import-Graph, Dead Code, bekannte Bugs & Risiken |
-| [`hardware_map.md`](hardware_map.md) | Physische MIDI-Daten aller Controls (Ports, Kanäle, Note/CC/PB-Nummern) |
-| [`FL_Studio_API_Reference.md`](FL_Studio_API_Reference.md) | FL Studio MIDI Scripting API — lokale Referenz |
-| [`IMPLEMENTATION_MAP.md`](IMPLEMENTATION_MAP.md) | Implementierungsplan: Hardware-MIDI ↔ gewünschte Funktionen (WIP) |
-| [`BRAINSTORM.md`](BRAINSTORM.md) | Feature-Ideen mit Machbarkeits-Tracking |
-| [`.cursorrules`](.cursorrules) | Pflicht-Crosschecks für AI-Agents |
+| File | Contents |
+|:-----|:---------|
+| [`architecture.md`](architecture.md) | Module dependencies, import graph, dead code, known bugs & risks |
+| [`hardware_map.md`](hardware_map.md) | Physical MIDI data for all controls (ports, channels, Note/CC/PB numbers) |
+| [`FL_Studio_API_Reference.md`](FL_Studio_API_Reference.md) | FL Studio MIDI scripting API — local reference |
+| [`IMPLEMENTATION_MAP.md`](IMPLEMENTATION_MAP.md) | Implementation plan: hardware MIDI ↔ desired functions |
+| [`BRAINSTORM.md`](BRAINSTORM.md) | Feature ideas with feasibility tracking |
+| [`USERGUIDE.md`](USERGUIDE.md) | End-user guide: all controls, modes, pad banking |
+| [`ROADMAP.md`](ROADMAP.md) | Development phases and status |
+| [`.cursorrules`](.cursorrules) | Mandatory crosschecks for AI agents |
 
 ---
 
-## Für AI-Agents
+## For AI Agents
 
-Vor jeder Code-Änderung in diesem Workspace die folgenden Referenzen konsultieren (siehe auch `.cursorrules`):
+Before any code change in this workspace, consult the following references (see also `.cursorrules`):
 
-1. **`FL_Studio_API_Reference.md`** — Jeden FL-API-Call verifizieren
-2. **`hardware_map.md`** — Alle MIDI-Annahmen verifizieren
-3. **`IMPLEMENTATION_MAP.md`** — Gewünschte Funktionszuordnung prüfen
-4. **`keylab_state.py`** — Zentraler State (einzige Quelle für Modes, Banking, Jitter)
-5. **`keylab_config.py`** — Hardware-Konstanten (keine MIDI-Werte hardcoden)
-6. **`BRAINSTORM.md`** — Feature-Kontext und Design-Entscheidungen
+1. **`FL_Studio_API_Reference.md`** — Verify every FL API call
+2. **`hardware_map.md`** — Verify all MIDI assumptions
+3. **`IMPLEMENTATION_MAP.md`** — Check desired function mapping
+4. **`keylab_state.py`** — Central state (single source for modes, banking, jitter)
+5. **`keylab_shared_state.py`** — Cross-port pad state (mode, bank, velocity, LED dirty flag)
+6. **`keylab_config.py`** — Hardware constants (never hardcode MIDI values)
+7. **`BRAINSTORM.md`** — Feature context and design decisions
 
-**Performance:** Das Script läuft in FL Studios Echtzeit-MIDI-Pipeline. Keine Allocations in Event-Handlern, kein Blocking, SysEx-Throttling beachten.
+**Performance:** The script runs in FL Studio's real-time MIDI pipeline. No allocations in event handlers, no blocking, respect SysEx throttling.

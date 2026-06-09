@@ -1,245 +1,258 @@
 # KeyLab mkII P Version — Roadmap
 
-> Übersicht aller Entwicklungsphasen. Jede Phase ist in sich abgeschlossen und testbar.
+> Overview of all development phases. Each phase is self-contained and testable.
 >
-> **Controller-Regeln (LED, LCD, Long-Press):** [`CONTROLLER_RULES.md`](CONTROLLER_RULES.md)
+> **Controller rules (LED, LCD, Long-Press):** [`CONTROLLER_RULES.md`](CONTROLLER_RULES.md)
 >
-> **Prinzipien:**
-> - Keine Magic Numbers — alle MIDI-Werte über `keylab_config.py`
-> - State nur über `keylab_state.py` — kein Module-Level-Mutable-State
-> - Jede Phase wird in `IMPLEMENTATION_MAP.md` als ✅ markiert
-> - Archiv-Code (`_archive/`) dient als Referenz, wird nie importiert
+> **Principles:**
+> - No magic numbers — all MIDI values via `keylab_config.py`
+> - State only via `keylab_state.py` — no module-level mutable state
+> - Each phase is marked ✅ in `IMPLEMENTATION_MAP.md` when done
+> - Archive code (`_archive/`) is reference only — never imported
 
 ---
 
-## Phase 1 — Bestandsaufnahme & Analyse ✅
+## Phase 1 — Inventory & Analysis ✅
 
-**Ziel:** Altes Script vollständig verstehen, dokumentieren, Bugs und Dead Code identifizieren.
+**Goal:** Fully understand, document, and identify bugs and dead code in the old script.
 
-| Ergebnis | Datei |
-|:---------|:------|
-| Architektur-Analyse (Import-Graph, Coupling, Dead Code, Bugs) | `architecture.md` |
-| Hardware MIDI Map (alle Ports, Kanäle, Note/CC/PB) | `hardware_map.md` |
-| Altes Script archiviert (14 Dateien) | `_archive/` |
-
----
-
-## Phase 2 — Dokumentation ✅
-
-**Ziel:** Referenzdokumente für die Neuentwicklung erstellen.
-
-| Ergebnis | Datei |
-|:---------|:------|
-| FL Studio MIDI Scripting API — lokale Referenz | `FL_Studio_API_Reference.md` |
-| Implementierungsplan: Hardware ↔ Funktionen | `IMPLEMENTATION_MAP.md` |
-| Feature-Ideen & Design-Entscheidungen | `BRAINSTORM.md` |
-| Projekt-README mit Setup, Credits, Dateistruktur | `README.md` |
-| AI-Agent Crosscheck Rules | `.cursorrules` |
+| Result | File |
+|:-------|:-----|
+| Architecture analysis (import graph, coupling, dead code, bugs) | `architecture.md` |
+| Hardware MIDI map (all ports, channels, Note/CC/PB) | `hardware_map.md` |
+| Old script archived (14 files) | `_archive/` |
 
 ---
 
-## Phase 3 — Skeleton & Infrastruktur ✅
+## Phase 2 — Documentation ✅
 
-**Ziel:** Modulare Basis, die in FL Studio lädt und das LCD ansteuert.
+**Goal:** Create reference documents for the new implementation.
 
-| Ergebnis | Datei | Herkunft |
-|:---------|:------|:---------|
-| Hardware-Konstanten (Transport, Encoder, Fader, Pads, Pedals) | `keylab_config.py` | Neu |
-| Zentraler State (Modes, Banking, Fader-Pickup, Plugin-State) | `keylab_state.py` | Neu |
-| Event-Dispatcher (transform → lookup → callback) | `keylab_dispatch.py` | Portiert (Ray Juang, MIT) |
-| LCD SysEx-Builder mit Scrolling | `keylab_display.py` | Portiert (Ray Juang, MIT) |
-| Timed-Page-Manager | `keylab_pages.py` | Portiert (Ray Juang, MIT) |
-| FL Callbacks Entry Point (DAW Port) | `device_KeyLabmkII.py` | Neu (Skeleton) |
-| V-Collection CC-Forwarding (Keys Port) | `device_KeyLabmkII_Forward.py` | Fertig |
-
-**Testbar:** Script lädt in FL Studio, LCD zeigt Channel + Pattern.
+| Result | File |
+|:-------|:-----|
+| FL Studio MIDI Scripting API — local reference | `FL_Studio_API_Reference.md` |
+| Implementation plan: Hardware ↔ Functions | `IMPLEMENTATION_MAP.md` |
+| Feature ideas & design decisions | `BRAINSTORM.md` |
+| Project README with setup, credits, file structure | `README.md` |
+| AI-Agent crosscheck rules | `.cursorrules` |
 
 ---
 
-## Phase 4 — Plugin-Datenbank ✅
+## Phase 3 — Skeleton & Infrastructure ✅
 
-**Ziel:** 300+ Plugin-Parameter-Mappings für Encoder-Steuerung.
+**Goal:** Modular foundation that loads in FL Studio and drives the LCD.
 
-| Ergebnis | Datei |
-|:---------|:------|
-| 309 Plugins mit 8-Macro-Slot-Schema, Lookup-API | `plugin_database.py` |
-| Plugin-Encoder-Handler (Logik fertig, noch nicht eingehängt) | `keylab_plugin.py` |
-| User-Defined Mappings (Datenquelle für Merge) | `user_defined_plugin_mappings.py` |
+| Result | File | Origin |
+|:-------|:-----|:-------|
+| Hardware constants (Transport, Encoder, Fader, Pads, Pedals) | `keylab_config.py` | New |
+| Central state (Modes, Banking, Fader-Pickup, Plugin-State) | `keylab_state.py` | New |
+| Event dispatcher (transform → lookup → callback) | `keylab_dispatch.py` | Ported (Ray Juang, MIT) |
+| LCD SysEx builder with scrolling | `keylab_display.py` | Ported (Ray Juang, MIT) |
+| Timed-page manager | `keylab_pages.py` | Ported (Ray Juang, MIT) |
+| FL callbacks entry point (DAW port) | `device_KeyLabmkII.py` | New (Skeleton) |
+| V-Collection CC forwarding (Keys port) | `device_KeyLabmkII_Forward.py` | Done |
 
-**Datenquellen:** CPS Community Spreadsheet + user_defined_plugin_mappings.py (FLKey Community)
+**Testable:** Script loads in FL Studio, LCD shows channel + pattern.
+
+---
+
+## Phase 4 — Plugin Database ✅
+
+**Goal:** 300+ plugin parameter mappings for encoder control.
+
+| Result | File |
+|:-------|:-----|
+| 309 plugins with 8-macro-slot schema, lookup API | `plugin_database.py` |
+| Plugin encoder handler (logic done, not yet wired) | `keylab_plugin.py` |
+| User-defined mappings (data source for merge) | `user_defined_plugin_mappings.py` |
+
+**Sources:** CPS Community Spreadsheet + user_defined_plugin_mappings.py (FLKey Community)
 
 ---
 
 ## Phase 5 — Transport ✅
 
-**Ziel:** Play/Stop/Record/Loop/Rewind/FastForward funktionieren. Dispatcher-Kette aufbauen.
+**Goal:** Play/Stop/Record/Loop/Rewind/FastForward working. Build dispatcher chain.
 
-| Aufgabe | Datei | Status |
-|:--------|:------|:-------|
-| Transport-Handler (6 Buttons → FL API) | `keylab_transport.py` | ✅ |
-| Dispatcher-Kette in OnMidiMsg aufbauen | `device_KeyLabmkII.py` | ✅ |
-| Transport LED-Feedback (Play/Record/Loop) | `keylab_feedback.py` | ✅ |
-| Beat-Indicator LED (OnUpdateBeatIndicator) | `keylab_feedback.py` | ✅ |
+| Task | File | Status |
+|:-----|:-----|:-------|
+| Transport handler (6 buttons → FL API) | `keylab_transport.py` | ✅ |
+| Dispatcher chain in OnMidiMsg | `device_KeyLabmkII.py` | ✅ |
+| Transport LED feedback (Play/Record/Loop) | `keylab_feedback.py` | ✅ |
+| Beat indicator LED (OnUpdateBeatIndicator) | `keylab_feedback.py` | ✅ |
 
 ---
 
 ## Phase 6 — DAW Commands ✅
 
-**Ziel:** Utility-Buttons für Workflow-Beschleunigung.
+**Goal:** Utility buttons for workflow acceleration.
 
-| Aufgabe | Datei | Status |
-|:--------|:------|:-------|
-| Snap Toggle, NewPattern, FocusMixer | `keylab_daw_commands.py` | ✅ |
-| Undo (Short Press) / Cut (Long Press) | `keylab_daw_commands.py` | ✅ |
-| Metronome Toggle, Overdub Toggle | `keylab_daw_commands.py` | ✅ |
+| Task | File | Status |
+|:-----|:-----|:-------|
+| Snap toggle, NewPattern, FocusMixer | `keylab_daw_commands.py` | ✅ |
+| Undo (short press) / Cut (long press) | `keylab_daw_commands.py` | ✅ |
+| Metronome toggle, Overdub toggle | `keylab_daw_commands.py` | ✅ |
 | Tap Tempo, Redo | `keylab_daw_commands.py` | ✅ |
 
-**Testbar:** Alle 10 DAW Buttons haben definierte Aktionen, LCD zeigt Feedback.
+**Testable:** All 10 DAW buttons have defined actions, LCD shows feedback.
 
 ---
 
 ## Phase 7 — Navigation ✅
 
-**Ziel:** Jog Wheel und Bank-Buttons für kontextabhängige Navigation.
+**Goal:** Jog Wheel and Bank buttons for context-sensitive navigation.
 
-| Aufgabe | Datei | Status |
-|:--------|:------|:-------|
-| Jog Wheel Drehen → context-sensitive | `keylab_navigation.py` | ✅ |
-| Jog Wheel Klick → Plugin/Folder/Arm | `keylab_navigation.py` | ✅ |
+| Task | File | Status |
+|:-----|:-----|:-------|
+| Jog Wheel rotate → context-sensitive | `keylab_navigation.py` | ✅ |
+| Jog Wheel click → Plugin/Folder/Arm | `keylab_navigation.py` | ✅ |
 | Bank Left/Right → Pattern/Preset/Browser | `keylab_navigation.py` | ✅ |
-| LCD-Feedback Navigation | `keylab_navigation.py` | ✅ |
+| LCD feedback navigation | `keylab_navigation.py` | ✅ |
 
-**Testbar:** Jog wechselt Tracks/Patterns/Browser-Items, Bank-Buttons schalten Patterns/Presets/Browser-Tabs.
+**Testable:** Jog switches tracks/patterns/browser items, bank buttons switch patterns/presets/browser tabs.
 
 ---
 
-## Phase 8 — Mixer Fader ✅
+## Phase 8 — Mixer Faders ✅
 
-**Ziel:** 9 Fader (8 + Master) steuern Mixer-Volume mit Jitter-Filter und Soft Pickup.
+**Goal:** 9 faders (8 + master) control mixer volume with jitter filter and soft pickup.
 
-| Aufgabe | Datei | Status |
-|:--------|:------|:-------|
-| Pitch Bend → mixer.setTrackVolume (+ Banking) | `keylab_mixer.py` | ✅ |
-| Jitter-Filter (FADER_JITTER_THRESHOLD) | `keylab_mixer.py` | ✅ |
-| Soft Pickup (Fader muss Software-Wert kreuzen) | `keylab_mixer.py` | ✅ |
-| Touch-Sensor Events (Fader Touch/Release) | `keylab_mixer.py` | ✅ |
+| Task | File | Status |
+|:-----|:-----|:-------|
+| Pitch Bend → mixer.setTrackVolume (+ banking) | `keylab_mixer.py` | ✅ |
+| Jitter filter (FADER_JITTER_THRESHOLD) | `keylab_mixer.py` | ✅ |
+| Soft Pickup (fader must cross software value) | `keylab_mixer.py` | ✅ |
+| Touch-sensor events (fader touch/release) | `keylab_mixer.py` | ✅ |
 
-**Testbar:** Fader steuern Mixer-Volume, kein Springen bei Bank-Wechsel.
+**Testable:** Faders control mixer volume, no jumps on bank change.
 
 ---
 
 ## Phase 9 — Mixer Encoder + Track Buttons ✅
 
-**Ziel:** Encoder steuern Pan, Track-Buttons selektieren/solo/muten Tracks.
+**Goal:** Encoders control pan, track buttons select/solo/mute tracks.
 
-| Aufgabe | Datei | Status |
-|:--------|:------|:-------|
-| Relative Encoder → mixer.setTrackPan (+ Banking) | `keylab_mixer.py` | ✅ |
-| Track Buttons: Short=ResetPan, Long=ToggleMute | `keylab_mixer.py` | ✅ |
+| Task | File | Status |
+|:-----|:-----|:-------|
+| Relative encoder → mixer.setTrackPan (+ banking) | `keylab_mixer.py` | ✅ |
+| Track buttons: Short=ResetPan, Long=ToggleMute | `keylab_mixer.py` | ✅ |
 | Bank Prev/Next → bank_offset ±1 | `keylab_mixer.py` | ✅ |
 
-**Testbar:** Encoder dreht Pan, Buttons selektieren Tracks, Banking funktioniert.
+**Testable:** Encoder controls pan, buttons select tracks, banking works.
 
 ---
 
-## Phase 10 — Plugin-Steuerung ✅
+## Phase 10 — Plugin Control ✅
 
-**Ziel:** Encoder 1–8 steuern Plugin-Parameter wenn Plugin fokussiert.
+**Goal:** Encoders 1–8 control plugin parameters when a plugin is focused.
 
-| Aufgabe | Datei | Status |
-|:--------|:------|:-------|
-| Plugin-Mode auto-detect (OnIdle → widPlugin) | `device_KeyLabmkII.py` | ✅ |
-| Encoder → Plugin-Parameter (aus plugin_database.py) | `keylab_plugin.py` | ✅ |
-| Jog Wheel → Preset-Navigation (bei Plugins mit special) | `keylab_navigation.py` | ✅ |
-| LCD: Parameter-Name + Wert-Anzeige | `keylab_plugin.py` | ✅ |
-| Fallback: Unbekannte Plugins → Free Mode / Generic | `keylab_plugin.py` | ✅ |
+| Task | File | Status |
+|:-----|:-----|:-------|
+| Plugin mode auto-detect (OnIdle → widPlugin) | `device_KeyLabmkII.py` | ✅ |
+| Encoder → plugin parameter (from plugin_database.py) | `keylab_plugin.py` | ✅ |
+| Jog Wheel → preset navigation (plugins with special) | `keylab_navigation.py` | ✅ |
+| LCD: parameter name + value display | `keylab_plugin.py` | ✅ |
+| Fallback: unknown plugins → Free Mode / Generic | `keylab_plugin.py` | ✅ |
 
-**Testbar:** Plugin öffnen → Encoder steuern die richtigen Parameter, LCD zeigt Plugin-Name.
+**Testable:** Open plugin → encoders control the right parameters, LCD shows plugin name.
 
+---
 
-## Phase 10.1 — Foundation Sync / Stabilisierung ✅
+## Phase 10.1 — Foundation Sync / Stabilisation ✅
 
-**Ziel:** Doku/Codemaps an die aktive `keylab_*`-Architektur anbinden, klare Basis-Bugs beheben, Pad-Mode-Toggle zum Laufen bringen.
+**Goal:** Bind docs/codemaps to the active `keylab_*` architecture, fix base bugs, get Pad Mode toggle running.
 
-| Aufgabe | Datei | Status |
-|:--------|:------|:-------|
-| Roadmap + `IMPLEMENTATION_MAP.md` auf Code-Stand | `ROADMAP.md`, `IMPLEMENTATION_MAP.md` | ✅ |
-| Codemaps + `FL_Studio_API_Reference.md` ergänzen | `codemaps/*`, `FL_Studio_API_Reference.md` | ✅ |
-| Pad-Mode IN ↔ Forward-Script | `keylab_shared_state.py`, `device_KeyLabmkII_Forward.py` | ✅ |
-| Long-Press 0,75 s + sofortiges LCD | `keylab_long_press.py` | ✅ |
-| Mixer-Bank / Fader-dB-LCD | `keylab_mixer.py` | ✅ |
-| Free-Mode, Plugin-Focus, Jog | diverse | ✅ |
+| Task | File | Status |
+|:-----|:-----|:-------|
+| Roadmap + `IMPLEMENTATION_MAP.md` up to code state | `ROADMAP.md`, `IMPLEMENTATION_MAP.md` | ✅ |
+| Codemaps + `FL_Studio_API_Reference.md` supplemented | `codemaps/*`, `FL_Studio_API_Reference.md` | ✅ |
+| Pad mode IN ↔ Forward script | `keylab_shared_state.py`, `device_KeyLabmkII_Forward.py` | ✅ |
+| Long press 0.75 s + immediate LCD | `keylab_long_press.py` | ✅ |
+| Mixer bank / fader dB LCD | `keylab_mixer.py` | ✅ |
+| Free mode, plugin focus, jog | various | ✅ |
 
-Pad-Mode-Toggle (Chromatic Kanal 1 / Drum Map Kanal 10) ist gelöst — siehe `CONTROLLER_RULES.md`.
+Pad mode toggle (Chromatic channel 1 / Drum Map channel 10) is solved — see `CONTROLLER_RULES.md`.
 
 ---
 
 ## Phase 11 — Pads ✅
 
-**Ziel:** Pad-Modus, Velocity, Cross-Port-State.
+**Goal:** Pad mode, velocity, cross-port state.
 
-| Aufgabe | Datei | Status |
-|:--------|:------|:-------|
-| Pad-Modus Chromatic / Drum Map (IN kurz) | `keylab_daw_commands.py`, Forward | ✅ |
-| Velocity-Toggle (IN lang, `Pad Velo: On/Off`) | `keylab_daw_commands.py`, Forward | ✅ |
-| Pad-LED-Farben (weiß / lila) | `keylab_feedback.py` | ✅ (Phase 12) |
-| Step-Sequencer auf Pads | — | → Phase 13 (optional) |
+| Task | File | Status |
+|:-----|:-----|:-------|
+| Pad mode Chromatic / Drum Map (IN short) | `keylab_daw_commands.py`, Forward | ✅ |
+| Velocity toggle (IN long, `Pad Velo: On/Off`) | `keylab_daw_commands.py`, Forward | ✅ |
+| Pad banking: 8 banks × 16 semitones, separate defaults | `keylab_shared_state.py`, Forward | ✅ |
+| Chromatic default: Bank 4 offset → Pad 1 = C5 (MIDI 80) | `keylab_shared_state.py` | ✅ |
+| Drum Map default: Bank 1 offset → Pad 1 = MIDI 36 (C1) | `keylab_shared_state.py`, Forward | ✅ |
+| Pad LED colours (white / purple) | `keylab_feedback.py`, `keylab_pad_leds.py` | ✅ |
+| Step sequencer on pads | — | → Phase 13 (optional) |
+
+**Pad bank behaviour:**
+
+| Mode | Banks | Bank range | Default bank | Pad 1 base note |
+|:-----|:------|:-----------|:------------|:----------------|
+| Chromatic | 0–7 (8 banks) | MIDI 20–127 | **Bank 4** | C5 (MIDI 80) |
+| Drum Map | 0–7 (8 banks) | MIDI 20–127 | **Bank 1** | C1 / GM 36 (MIDI 36) |
+
+Bank offset is stored per-mode and restored when toggling back.
 
 ---
 
 ## Phase 12 — LED Feedback ⬜
 
-**Ziel:** Kohärente LED-Logik und Fehlerbehebungen — Spezifikation in [`CONTROLLER_RULES.md`](CONTROLLER_RULES.md).
+**Goal:** Coherent LED logic and bug fixes — specification in [`CONTROLLER_RULES.md`](CONTROLLER_RULES.md).
 
-| Bereich | Regel | Status |
-|:--------|:------|:-------|
-| **Pads** | IN Button toggle mode instantly, Farben nicht von Blau überschrieben | ⬜ |
-| **DAW Commands** | Init-State correct, Save-Button Cycle (CR -> Mixer -> Browser) | ⬜ |
-| **Transports** | Rewind/FastForward auf 100% | ⬜ |
-| **Navigation** | Nav-LEDs glitchen nicht mehr bei Jog Wheel turn | ⬜ |
-| **Track Buttons** | Helligkeit angehoben (sichtbar), Konflikt mit Part-Prev/Next gelöst | ⬜ |
-| **Mixer Part 48/49** | Prev/Next auf korrekten IDs | ⬜ |
+| Area | Rule | Status |
+|:-----|:-----|:-------|
+| **Pads** | IN button toggles mode instantly, colours not overwritten by blue | ⬜ |
+| **DAW Commands** | Init state correct, Save button cycle (CR → Mixer → Browser) | ⬜ |
+| **Transports** | Rewind/FastForward at 100% | ⬜ |
+| **Navigation** | Nav LEDs no longer glitch on jog wheel turn | ⬜ |
+| **Track Buttons** | Brightness raised (visible), conflict with Part Prev/Next resolved | ⬜ |
+| **Mixer Part 48/49** | Prev/Next on correct IDs | ⬜ |
 
 ---
 
 ## Phase 13 — Polish & Edge Cases ⬜
 
-**Ziel:** Feinschliff, Performance, Robustheit.
+**Goal:** Fine-tuning, performance, robustness.
 
-| Aufgabe | Datei |
-|:--------|:------|
-| Step-Sequencer auf Pads (optional) | TBD |
-| Alle LEDs korrekt synchronisiert (Feintuning) | `keylab_feedback.py` |
-| Display-Feinschliff (Truncation, Sonderzeichen) | `keylab_display.py` |
-| Error-Handling für alle FL API Calls | Alle Handler |
-| Channel Rack Mode (Auto-Switch wenn CR fokussiert) | `keylab_mixer.py` |
-| Free Mode (Long Press Bank Prev → Fader/Encoder passthrough toggle) | `keylab_mixer.py`, `keylab_state.py` |
-| Performance-Check (keine Allocations in Event-Handlern) | Alle Handler |
-| Dokumentation finalisieren | Alle .md Dateien |
-
----
-
-## Dateiübersicht (Zielzustand)
-
-| Datei | Rolle | Phase |
-|:------|:------|:------|
-| `device_KeyLabmkII.py` | Entry Point + Dispatcher-Kette | 3, 5 |
-| `device_KeyLabmkII_Forward.py` | V-Collection CC-Forwarding | 3 |
-| `keylab_config.py` | Hardware-Konstanten | 3 |
-| `keylab_state.py` | Zentraler State | 3 |
-| `keylab_dispatch.py` | Event-Dispatcher + SysEx | 3 |
-| `keylab_display.py` | LCD-Treiber | 3 |
-| `keylab_pages.py` | Page-Manager | 3 |
-| `keylab_transport.py` | Transport-Handler | 5 |
-| `keylab_feedback.py` | LED/Pad-Feedback | 5, 8, 11 |
-| `keylab_daw_commands.py` | DAW Command Buttons | 6 |
-| `keylab_navigation.py` | Jog/Bank/Window | 7 |
-| `keylab_mixer.py` | Fader/Encoder/Buttons/Banking | 8, 9 |
-| `keylab_plugin.py` | Plugin-Encoder-Steuerung | 10 |
-| `keylab_shared_state.py` | Pad-Mode/Bank (cross-port) | 10.1 |
-| `device_KeyLabmkII_Forward.py` | Pad-Transposition + V-Collection | 3, 10.1 |
-| `plugin_database.py` | 309 Plugin-Mappings | 4 |
+| Task | File |
+|:-----|:-----|
+| Step sequencer on pads (optional) | TBD |
+| All LEDs correctly synchronised (fine-tuning) | `keylab_feedback.py` |
+| Display fine-tuning (truncation, special characters) | `keylab_display.py` |
+| Error handling for all FL API calls | All handlers |
+| Channel Rack mode (auto-switch when CR focused) | `keylab_mixer.py` |
+| Free Mode (Long Press Bank Prev → fader/encoder passthrough toggle) | `keylab_mixer.py`, `keylab_state.py` |
+| Performance check (no allocations in event handlers) | All handlers |
+| Finalise documentation | All .md files |
 
 ---
 
-*Letzte Aktualisierung: 2026-06-07 — Phase 12 zurück auf unerledigt für Bugfixes gesetzt*
+## File Overview (Target State)
+
+| File | Role | Phase |
+|:-----|:-----|:------|
+| `device_KeyLabmkII.py` | Entry point + dispatcher chain | 3, 5 |
+| `device_KeyLabmkII_Forward.py` | V-Collection CC forwarding + pad transposition | 3, 10.1, 11 |
+| `keylab_config.py` | Hardware constants | 3 |
+| `keylab_state.py` | Central state | 3 |
+| `keylab_dispatch.py` | Event dispatcher + SysEx | 3 |
+| `keylab_display.py` | LCD driver | 3 |
+| `keylab_pages.py` | Page manager | 3 |
+| `keylab_transport.py` | Transport handler | 5 |
+| `keylab_feedback.py` | LED/pad feedback | 5, 8, 11 |
+| `keylab_daw_commands.py` | DAW command buttons | 6 |
+| `keylab_navigation.py` | Jog/bank/window | 7 |
+| `keylab_mixer.py` | Fader/encoder/buttons/banking | 8, 9 |
+| `keylab_plugin.py` | Plugin encoder control | 10 |
+| `keylab_shared_state.py` | Pad mode/bank (cross-port) | 10.1 |
+| `keylab_pad_leds.py` | Pad LED animations | 11 |
+| `plugin_database.py` | 309 plugin mappings | 4 |
+
+---
+
+*Last updated: 2026-06-09 — Phase 11 pads complete including dual-mode banking*
