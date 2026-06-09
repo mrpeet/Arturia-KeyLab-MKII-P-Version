@@ -32,8 +32,11 @@ import keylab_shared_state as pad_state
 
 from keylab_config import Pad
 from keylab_pad_leds import (
-    restore_mcc_pads,
     clear_pad_leds,
+    set_all_pads_idle,
+    on_pad_note_on,
+    on_pad_note_off,
+    on_pad_aftertouch,
     trigger_mode_animation,
     tick_animation,
 )
@@ -144,7 +147,7 @@ def _apply_pad_velocity(event, note_on_before_transpose):
 def OnInit():
     print("### INIT KeyLab mkII Forward (Port 0) ###")
     print("### Pad mode: %s (file+sys sync) ###" % pad_state.get_pad_mode())
-    restore_mcc_pads()
+    set_all_pads_idle()
 
 
 def OnDeInit():
@@ -154,8 +157,11 @@ def OnDeInit():
 def OnIdle():
     # Mode-change signal from DAW script
     if pad_state.consume_pad_led_dirty():
+        # 1. Paint all pads to the new mode's idle color (clears old mode color)
+        set_all_pads_idle()
+        # 2. Start animation — first tick immediately overrides only the pattern pads
         trigger_mode_animation(pad_state.get_pad_mode())
-        
+
     # Update animation fading
     tick_animation()
 
@@ -163,24 +169,34 @@ def OnIdle():
 def OnMidiIn(event):
     """Intercept before FL processing."""
     if _is_pad_event(event):
-        old_note = event.data1
-        old_status = event.status
-        note_on = event.status == _NOTE_ON_CH10 and event.data2 > 0
-        is_aftertouch = event.status == _POLY_AFTERTOUCH_CH10
-        is_note_off = event.status == _NOTE_OFF_CH10 or (event.status == _NOTE_ON_CH10 and event.data2 == 0)
+        note = event.data1
+        velocity = event.data2
+        orig_status = event.status
+        is_note_on    = orig_status == _NOTE_ON_CH10 and velocity > 0
+        is_note_off   = orig_status == _NOTE_OFF_CH10 or (orig_status == _NOTE_ON_CH10 and velocity == 0)
+        is_aftertouch = orig_status == _POLY_AFTERTOUCH_CH10
+
+        # Update pad LED BEFORE transpose so we use the raw hardware note.
+        # on_pad_note_off fires immediately — outruns the hardware MCC-restore.
+        if is_note_on:
+            on_pad_note_on(note, velocity)
+        elif is_note_off:
+            on_pad_note_off(note)
+        elif is_aftertouch:
+            on_pad_aftertouch(note, velocity)  # data2 = pressure
 
         _transpose_pad(event)
-        _apply_pad_velocity(event, note_on)
-                
+        _apply_pad_velocity(event, is_note_on)
+
         if _DEBUG_PADS:
-            print("Pad: mode=%s bank=%d vel=%s ch=%d note %d->%d vel=%d status %d->%d" % (
+            print("Pad: mode=%s bank=%d vel=%s ch=%d note %d->%d vel=%d status 0x%02X->0x%02X" % (
                 pad_state.get_pad_mode(),
                 pad_state.get_pad_bank_offset(),
                 "on" if pad_state.get_pad_velocity_enabled() else "off",
                 event.midiChan,
-                old_note, event.data1,
+                note, event.data1,
                 event.data2,
-                old_status, event.status))
+                orig_status, event.status))
 
     focused_plugin = ui.getFocusedPluginName()
     is_vcol = focused_plugin in V_COLLECTION
