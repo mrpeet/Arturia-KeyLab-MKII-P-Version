@@ -39,6 +39,19 @@ _IDLE_FRACTION = 0.5
 # ---------------------------------------------------------------------------
 _pad_rgb_cache = {}
 
+# ---------------------------------------------------------------------------
+#  Aftertouch throttle — Poly Aftertouch arrives at a high rate per pad; echoing
+#  every message as SysEx floods the device. Limit to one update per pad per
+#  interval; the latest pending color is flushed from OnIdle.
+# ---------------------------------------------------------------------------
+_AFTERTOUCH_MIN_INTERVAL_MS = 40.0
+_pad_last_send_ms = {}
+_pad_pending_rgb = {}
+
+
+def _now_ms():
+    return time.monotonic() * 1000.0
+
 
 # ---------------------------------------------------------------------------
 #  Animation state
@@ -67,6 +80,7 @@ def _send_pad_rgb(led_slot, r, g, b):
     if _pad_rgb_cache.get(led_slot) == payload:
         return
     _pad_rgb_cache[led_slot] = payload
+    _pad_last_send_ms[led_slot] = _now_ms()
     send_to_device(payload)
 
 
@@ -95,6 +109,7 @@ def set_all_pads_idle():
     Clears cache first so every pad is unconditionally written.
     """
     _pad_rgb_cache.clear()
+    _pad_pending_rgb.clear()
     r, g, b = _mode_color_at(_IDLE_FRACTION)
     for led_slot in range(16):
         _send_pad_rgb(led_slot, r, g, b)
@@ -129,6 +144,8 @@ def on_pad_note_off(note):
     if led_slot is None:
         return
     r, g, b = _mode_color_at(_IDLE_FRACTION)
+    # Drop any throttled aftertouch color so it can't re-light the pad later
+    _pad_pending_rgb.pop(led_slot, None)
     # Force send so we always beat the hardware MCC reset
     _pad_rgb_cache.pop(led_slot, None)
     _send_pad_rgb(led_slot, r, g, b)
@@ -137,8 +154,9 @@ def on_pad_note_off(note):
 def on_pad_aftertouch(note, pressure):
     """Pressure-proportional brightness on Poly Aftertouch.
 
-    Also prevents MCC-color flicker during sustained pressure.
-    pressure: 0-127.
+    Also prevents MCC-color flicker during sustained pressure (bypasses the
+    cache), but at most once per pad per _AFTERTOUCH_MIN_INTERVAL_MS; newer
+    values in between are flushed from OnIdle. pressure: 0-127.
     """
     led_slot = Pad.NOTE_TO_LED_SLOT.get(note)
     if led_slot is None:
@@ -146,8 +164,24 @@ def on_pad_aftertouch(note, pressure):
     # Keep at least idle brightness so pad never goes dark while held
     frac = max(_IDLE_FRACTION, pressure / 127.0)
     r, g, b = _mode_color_at(frac)
+    if _now_ms() - _pad_last_send_ms.get(led_slot, 0.0) < _AFTERTOUCH_MIN_INTERVAL_MS:
+        _pad_pending_rgb[led_slot] = (r, g, b)
+        return
+    _pad_pending_rgb.pop(led_slot, None)
     _pad_rgb_cache.pop(led_slot, None)
     _send_pad_rgb(led_slot, r, g, b)
+
+
+def flush_pending_aftertouch():
+    """Called in OnIdle — send the latest throttled aftertouch color per pad."""
+    if not _pad_pending_rgb:
+        return
+    now = _now_ms()
+    for led_slot in list(_pad_pending_rgb.keys()):
+        if now - _pad_last_send_ms.get(led_slot, 0.0) >= _AFTERTOUCH_MIN_INTERVAL_MS:
+            r, g, b = _pad_pending_rgb.pop(led_slot)
+            _pad_rgb_cache.pop(led_slot, None)
+            _send_pad_rgb(led_slot, r, g, b)
 
 
 # ---------------------------------------------------------------------------
@@ -215,5 +249,6 @@ def tick_animation():
 def clear_pad_leds():
     """Turn off all pad RGB LEDs (used in OnDeInit)."""
     _pad_rgb_cache.clear()
+    _pad_pending_rgb.clear()
     for pad_id in Pad.LED_IDS:
         send_to_device(bytes([0x02, 0x00, 0x16, pad_id, 0, 0, 0, 0x7F]))

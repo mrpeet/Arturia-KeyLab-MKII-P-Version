@@ -18,6 +18,7 @@
 
 import os
 import sys as _sys
+import time as _time
 
 PAD_BANK_COUNT = 8
 
@@ -49,6 +50,12 @@ def _state_file_path():
 _last_write_mtime = 0.0   # mtime of the file as WE last wrote it (0 = never)
 _last_read_mtime = 0.0    # mtime of the file as WE last read it
 _cached_file_data = None
+
+# Getters run on every pad event (incl. aftertouch) and every OnIdle; checking
+# the file each time means thousands of disk stats per second. Changes from the
+# other interpreter only need to arrive within a fraction of a second.
+_FILE_CHECK_INTERVAL_S = 0.1
+_last_file_check = -1.0
 
 
 def _read_file_state():
@@ -141,7 +148,13 @@ def _sync_store_from_file_if_changed():
     We detect 'written by another interpreter' as: current file mtime differs
     from _last_write_mtime (the mtime of the file as WE last wrote it).
     When _last_write_mtime == 0 (we never wrote), any real file is 'from another'.
+    Checked at most every _FILE_CHECK_INTERVAL_S.
     """
+    global _last_file_check
+    now = _time.monotonic()
+    if _last_file_check >= 0.0 and now - _last_file_check < _FILE_CHECK_INTERVAL_S:
+        return
+    _last_file_check = now
     path = _state_file_path()
     try:
         mtime = os.path.getmtime(path)

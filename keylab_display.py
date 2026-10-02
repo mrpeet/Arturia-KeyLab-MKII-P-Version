@@ -49,6 +49,12 @@ class KeyLabDisplay:
         # Track what's currently being displayed
         self._last_payload = bytes()
 
+        # Coalesce fast updates (faders/encoders): at most one LCD SysEx per interval;
+        # the newest text is kept pending and flushed from Refresh() (OnIdle).
+        self._min_send_interval_ms = 50
+        self._last_send_ms = 0
+        self._pending_payload = None
+
     def _get_line1_bytes(self):
         # Get up to 16-bytes the exact chars to display for line 1.
         start_pos = self._line1_display_offset
@@ -94,9 +100,29 @@ class KeyLabDisplay:
         data += bytes([0x7F])
 
         self._update_scroll_pos()
-        if self._last_payload != data:
-            send_to_device(data)
-            self._last_payload = data
+        if self._last_payload == data:
+            self._pending_payload = None
+            return
+        if self.time_ms() - self._last_send_ms < self._min_send_interval_ms:
+            self._pending_payload = data
+            return
+        self._send_payload(data)
+
+    def _send_payload(self, data):
+        send_to_device(data)
+        self._last_payload = data
+        self._last_send_ms = self.time_ms()
+        self._pending_payload = None
+
+    def FlushNow(self):
+        """Send a pending update immediately (OnDeInit — no later OnIdle)."""
+        if self._pending_payload is not None:
+            self._send_payload(self._pending_payload)
+
+    def _flush_pending(self):
+        if (self._pending_payload is not None
+                and self.time_ms() - self._last_send_ms >= self._min_send_interval_ms):
+            self._send_payload(self._pending_payload)
 
     def ResetScroll(self):
         self._line1_display_offset = 0
@@ -131,4 +157,5 @@ class KeyLabDisplay:
         """ Called to refresh the display, possibly with updated text. """
         if self.time_ms() - self._last_update_ms >= self._scroll_interval_ms:
             self._refresh_display()
+        self._flush_pending()
         return self

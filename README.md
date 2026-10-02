@@ -97,6 +97,15 @@ This project is based on the work of several developers:
 | [`ROADMAP.md`](ROADMAP.md) | Development phases and status |
 | [`.cursorrules`](.cursorrules) | Mandatory crosschecks for AI agents |
 
+### Tests & diagnostics
+
+| File | Contents |
+|:-----|:---------|
+| [`tests/sysex_traffic_test.py`](tests/sysex_traffic_test.py) | Offline test (no FL needed): simulates pads/aftertouch, faders, encoders and fails if the scripts send too much SysEx. Run `python tests/sysex_traffic_test.py` before every push. |
+| [`tools/usb_watch.ps1`](tools/usb_watch.ps1) | Logs when the KeyLab disappears/reappears on USB (`tools/usb_watch.log`) — helps tell hardware/USB dropouts from firmware/script hangs. |
+
+SysEx limits in the scripts: pad aftertouch LEDs ≤ 1 update / 40 ms per pad, LCD ≤ 1 update / 50 ms, shared-state file checked ≤ every 100 ms. `keylab_dispatch.send_to_device` prints `KeyLab WARNING: N SysEx/s` to FL's Script Output if a script exceeds 150 SysEx/s.
+
 ---
 
 ## For AI Agents

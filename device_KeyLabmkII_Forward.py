@@ -39,6 +39,7 @@ from keylab_pad_leds import (
     on_pad_aftertouch,
     trigger_mode_animation,
     tick_animation,
+    flush_pending_aftertouch,
 )
 
 # Debug pad transposition in FL Script Output (set False when stable)
@@ -164,6 +165,9 @@ def OnIdle():
 
     # Update animation fading
     tick_animation()
+
+    # Send throttled aftertouch colors
+    flush_pending_aftertouch()
 
 
 def OnMidiIn(event):

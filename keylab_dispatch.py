@@ -1,6 +1,8 @@
 # MIT License
 # Copyright (c) 2020 Ray Juang
 
+import time
+
 import device
 
 
@@ -46,5 +48,26 @@ class MidiEventDispatcher:
         return processed
 
 
+# SysEx rate monitor: prints a warning to FL's Script Output when one script
+# sends more than _SYSEX_WARN_PER_SEC messages within one second. Messages are
+# never dropped here — LED/display caches assume every send reaches the device.
+_SYSEX_WARN_PER_SEC = 150
+_rate_window_start = 0.0
+_rate_count = 0
+
+
+def _track_sysex_rate():
+    global _rate_window_start, _rate_count
+    now = time.monotonic()
+    if now - _rate_window_start >= 1.0:
+        if _rate_count > _SYSEX_WARN_PER_SEC:
+            print("KeyLab WARNING: %d SysEx/s to device (%s)" % (
+                _rate_count, time.strftime("%H:%M:%S")))
+        _rate_window_start = now
+        _rate_count = 0
+    _rate_count += 1
+
+
 def send_to_device(data):
+    _track_sysex_rate()
     device.midiOutSysex(bytes([0xF0, 0x00, 0x20, 0x6B, 0x7F, 0x42]) + data + bytes([0xF7]))

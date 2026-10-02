@@ -103,6 +103,7 @@ def _ensure_initialized():
 def OnDeInit():
     _pages.SetPageLines('goodbye', line1='KeyLab mkII', line2='Disconnected')
     _pages.SetActivePage('goodbye')
+    _display.FlushNow()
     clear_all_leds()
 
 
