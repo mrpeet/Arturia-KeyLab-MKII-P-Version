@@ -92,8 +92,8 @@ Plugin mode: Encoder 1–8 → `keylab_plugin.py`. Free mode: virtual absolute C
 
 | Hardware Label | Type    | Data1 | Function        | FL API / Logic            | Status |
 |:---            |:---     |:---   |:---             |:---                       |:---    |
-| Button 1–8     | Note On | 24–31 | Short=Mute Long=Solo/Pan reset | context-dependent | done |
-| Button 9       | Note On | 32    | Like 1–8 (master slot)        | context-dependent | done |
+| Button 1–8     | Note On | 24–31 | Short=Mute Long=Solo/Pan reset / Plugin Launch (w/ Shift) | context-dependent | done |
+| Button 9       | Note On | 51    | Plugin Launch Shift Modifier  | `keylab_plugin_launch.py` | done |
 
 *Note:* Behaviour differs from old docs (Select on short press was planned, code: Short=Mute).
 

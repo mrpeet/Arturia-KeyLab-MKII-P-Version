@@ -158,7 +158,7 @@ The 9 buttons below the encoders:
 | **Short press** | Mute / un-mute track or channel |
 | **Long press (≥0.75 s)** | Pan reset (Mixer) or Solo (Channel Rack) — LCD hint at threshold |
 
-> Button 9 (Master) is reserved.
+> **Button 9 (Master) is the Plugin Launch Shift Key**. Hold it to load plugins with buttons 1–8. See [9. Plugin Control](#9-plugin-control).
 
 ---
 
@@ -176,6 +176,18 @@ LCD shows on bank change: `Bank / Tracks 9–16` (last bank only up to the highe
 ---
 
 ## 9. Plugin Control
+
+### Plugin Launch Mode (Track Buttons)
+
+Hold **Track Button 9 (Master)** to enter Plugin Launch Mode. The Track Button 1–8 LEDs will light up in custom plugin colours based on your current focus (Mixer vs. Channel Rack). 
+
+1. **Hold Button 9 (Shift)**
+2. **Press a Track Button (1-8)**: The display previews the plugin assigned to that slot. The button glows bright to indicate it's selected.
+3. **Press the same button again**: Confirms and loads the plugin into the selected Mixer Track or Channel Rack slot.
+
+> **Configure your plugins:** Edit the `plugin_slots.py` file to set the names and LED colours for your preferred plugins in each context.
+
+### Plugin Parameter Control (Encoders)
 
 When a plugin editor is focused, **encoders 1–8 automatically switch** to plugin mode.
 

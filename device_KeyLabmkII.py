@@ -15,6 +15,11 @@ import channels
 import mixer
 import patterns
 import midi
+import sys
+for _mod in list(sys.modules.keys()):
+    if _mod.startswith('keylab_') or _mod.startswith('plugin_'):
+        del sys.modules[_mod]
+
 from keylab_display import KeyLabDisplay
 from keylab_pages import KeyLabPagedDisplay
 from keylab_dispatch import send_to_device

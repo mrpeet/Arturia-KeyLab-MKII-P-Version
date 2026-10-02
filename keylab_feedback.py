@@ -307,6 +307,11 @@ def update_track_button_leds(state):
     Bank 0 => Channels 0-7.
     Uncolored tracks show white.
     """
+    if getattr(state, 'plugin_shift_held', False):
+        import keylab_plugin_launch
+        keylab_plugin_launch.show_plugin_shift_leds()
+        return
+
     try:
         if ui.getFocused(midi.widMixer):
             count = mixer.getTrackCount()

@@ -104,6 +104,10 @@ class KeyLabState:
         # Toggled in keylab_daw_commands._do_toggle_overdub; read by keylab_feedback.
         self.overdub_enabled = False
 
+        # --- Plugin Shift Launch ---
+        self.plugin_shift_held = False
+        self.plugin_shift_pending = None
+
     # ------------------------------------------------------------------
     #  Pad state — delegated to keylab_shared_state for cross-port sharing
     # ------------------------------------------------------------------

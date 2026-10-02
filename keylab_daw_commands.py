@@ -45,12 +45,12 @@ def handle_daw_commands(event, state, pages):
 
     if event.data1 == TrackControl.SOLO:
         if event.data2 > 0:
-            _do_new_pattern(event, pages)
+            _do_toggle_piano_roll(event, pages)
         return True
 
     if event.data1 == TrackControl.MUTE:
         if event.data2 > 0:
-            _do_toggle_piano_roll(event, pages)
+            _do_new_pattern(event, pages)
         return True
 
     if event.data1 == TrackControl.READ:

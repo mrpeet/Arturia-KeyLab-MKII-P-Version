@@ -134,13 +134,12 @@ class TrackButton:
     BTN_6 = 29
     BTN_7 = 30
     BTN_8 = 31
-    BTN_9 = 32
+    BTN_9 = 51
 
     FIRST = 24
-    LAST  = 32
     COUNT = 9
 
-    ALL_NOTES = list(range(FIRST, LAST + 1))
+    ALL_NOTES = [BTN_1, BTN_2, BTN_3, BTN_4, BTN_5, BTN_6, BTN_7, BTN_8, BTN_9]
 
 
 # ---------------------------------------------------------------------------

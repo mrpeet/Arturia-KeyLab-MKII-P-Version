@@ -22,6 +22,7 @@ from keylab_config import (
 )
 import keylab_long_press as long_press
 from keylab_feedback import update_track_button_leds
+import keylab_plugin_launch
 
 # handle_free_fader return codes
 FREE_FADER_NONE = 0
@@ -262,14 +263,24 @@ def handle_mixer(event, state, pages):
             event.handled = True
             return True
 
-        # --- Track buttons: notes 24–32 ---
+        # --- Track buttons: notes 24–31, 51 ---
         if event.data1 in TrackButton.ALL_NOTES:
-            index = event.data1 - TrackButton.FIRST
+            index = TrackButton.ALL_NOTES.index(event.data1)
             if state.plugin_mode and index < 8:
                 return False  # Plugin focus: track buttons 1-8 disabled
             if state.free_mode and index < 8:
                 return False  # Passthrough track buttons 1–8 in Free Mode
-            _do_track_button(event, state, pages)
+            
+            if index == 8:
+                if event.data2 > 0:
+                    keylab_plugin_launch.on_shift_press(state, pages)
+                else:
+                    keylab_plugin_launch.on_shift_release(state, pages)
+            elif getattr(state, 'plugin_shift_held', False) and index < 8:
+                if event.data2 > 0:
+                    keylab_plugin_launch.on_track_button_shift(index, state, pages)
+            else:
+                _do_track_button(event, state, pages)
             event.handled = True
             return True
 
