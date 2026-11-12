@@ -104,6 +104,9 @@ This project is based on the work of several developers:
 | [`tests/sysex_traffic_test.py`](tests/sysex_traffic_test.py) | Offline test (no FL needed): simulates pads/aftertouch, faders, encoders and fails if the scripts send too much SysEx. Run `python tests/sysex_traffic_test.py` before every push. |
 | [`tools/usb_watch.ps1`](tools/usb_watch.ps1) | Logs when the KeyLab disappears/reappears on USB (`tools/usb_watch.log`) — helps tell hardware/USB dropouts from firmware/script hangs. |
 | [`tools/midi_activity_watch.py`](tools/midi_activity_watch.py) | Listens read-only on the KeyLab MIDI inputs in parallel to FL and logs when the keyboard sends (`tools/midi_activity.log`) — shows whether a "dead" keyboard still reaches Windows. Run `py tools\midi_activity_watch.py`. |
+| [`tools/keylab_guard.py`](tools/keylab_guard.py) | Detects the KeyLab "USB MIDI hang" (identity-request probe every 60 s) and resets the keyboard on USB without a power cycle. Run from an admin terminal: `py tools\keylab_guard.py`. |
+
+> **Keyboard stops responding / FL freezes on refresh?** See [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) — it is a KeyLab USB MIDI hang, not a script bug, and can be recovered without switching the keyboard off.
 
 SysEx limits in the scripts: pad aftertouch LEDs ≤ 1 update / 40 ms per pad, LCD ≤ 1 update / 50 ms, shared-state file checked ≤ every 100 ms. `keylab_dispatch.send_to_device` prints `KeyLab WARNING: N SysEx/s` to FL's Script Output if a script exceeds 150 SysEx/s.
 
