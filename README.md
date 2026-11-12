@@ -74,6 +74,7 @@ This project is based on the work of several developers:
 | `keylab_daw_commands.py` | DAW command buttons (Snap/Undo/Metro/Redo…) | ✅ Phase 6 |
 | `keylab_feedback.py` | LED and pad feedback | ✅ Phases 5, 8, 11 |
 | `keylab_pad_leds.py` | Pad LED colours and animations | ✅ Phase 11 |
+| `keylab_keepalive.py` | USB keep-alive + health check (identity request every 30 s) — see `TROUBLESHOOTING.md` | ✅ |
 | `keylab_plugin.py` | Plugin encoder control | ✅ Phase 10 |
 | `plugin_database.py` | 309 plugin parameter mappings | ✅ Phase 4 |
 | `user_defined_plugin_mappings.py` | User-defined plugin mappings | ✅ Phase 4 |
@@ -104,9 +105,8 @@ This project is based on the work of several developers:
 | [`tests/sysex_traffic_test.py`](tests/sysex_traffic_test.py) | Offline test (no FL needed): simulates pads/aftertouch, faders, encoders and fails if the scripts send too much SysEx. Run `python tests/sysex_traffic_test.py` before every push. |
 | [`tools/usb_watch.ps1`](tools/usb_watch.ps1) | Logs when the KeyLab disappears/reappears on USB (`tools/usb_watch.log`) — helps tell hardware/USB dropouts from firmware/script hangs. |
 | [`tools/midi_activity_watch.py`](tools/midi_activity_watch.py) | Listens read-only on the KeyLab MIDI inputs in parallel to FL and logs when the keyboard sends (`tools/midi_activity.log`) — shows whether a "dead" keyboard still reaches Windows. Run `py tools\midi_activity_watch.py`. |
-| [`tools/keylab_guard.py`](tools/keylab_guard.py) | Detects the KeyLab "USB MIDI hang" (identity-request probe every 60 s) and resets the keyboard on USB without a power cycle. Run from an admin terminal: `py tools\keylab_guard.py`. |
 
-> **Keyboard stops responding / FL freezes on refresh?** See [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) — it is a KeyLab USB MIDI hang, not a script bug, and can be recovered without switching the keyboard off.
+> **Keyboard stops responding / FL freezes on refresh?** See [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) — it is a KeyLab USB MIDI hang, not a script bug. The script sends a tiny keep-alive (`keylab_keepalive.py`) and shows a hint in FL if the keyboard stops answering.
 
 SysEx limits in the scripts: pad aftertouch LEDs ≤ 1 update / 40 ms per pad, LCD ≤ 1 update / 50 ms, shared-state file checked ≤ every 100 ms. `keylab_dispatch.send_to_device` prints `KeyLab WARNING: N SysEx/s` to FL's Script Output if a script exceeds 150 SysEx/s.
 

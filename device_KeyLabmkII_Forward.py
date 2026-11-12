@@ -170,6 +170,14 @@ def OnIdle():
     flush_pending_aftertouch()
 
 
+def OnSysEx(event):
+    # The KeyLab answers the DAW script's keep-alive identity request on both
+    # ports (F0 7E <dev> 06 02 00 20 6B ...). Swallow it here; leave other SysEx alone.
+    data = event.sysex
+    if data and len(data) >= 8 and data[1] == 0x7E and data[3:8] == b"\x06\x02\x00\x20\x6B":
+        event.handled = True
+
+
 def OnMidiIn(event):
     """Intercept before FL processing."""
     if _is_pad_event(event):

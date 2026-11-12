@@ -45,6 +45,7 @@ from keylab_feedback import (
     clear_led_caches,
 )
 import keylab_long_press
+import keylab_keepalive
 
 # Set True only while debugging MIDI routing in Script Output
 _DEBUG_MIDI = False
@@ -81,6 +82,7 @@ def OnInit():
     _pages.SetActivePage('main')
 
     reset_fader_state(_state)
+    keylab_keepalive.reset()
 
     print("### KeyLab mkII P Version ready ###")
 
@@ -113,6 +115,7 @@ def OnMidiMsg(event):
     Order: Free Encoder (modifies to absolute) → Transport → DAW Commands → Navigation → Plugin → Mixer
     First handler that returns True wins; unhandled events are logged.
     """
+    keylab_keepalive.note_input()
     _ensure_initialized()
 
     if _DEBUG_MIDI and event.midiId == midi.PITCH_BEND_STATUS:
@@ -198,6 +201,7 @@ def OnIdle():
     _sync_bank()
     reset_soft_pickup_on_focus_change(_state)
     tick_feedback_idle(_state)
+    keylab_keepalive.tick()
 
 
 def OnUpdateBeatIndicator(value):
@@ -206,6 +210,12 @@ def OnUpdateBeatIndicator(value):
 
 
 def OnSysEx(event):
+    # Keep-alive identity reply: swallow silently (see keylab_keepalive.py)
+    if keylab_keepalive.on_sysex(event.sysex):
+        event.handled = True
+        return
+    keylab_keepalive.note_input()
+
     # Detect Arturia "DAW Mode activated" or Boot SysEx (F0 00 20 6B 7F 42 02 00 00 15 00 F7)
     if event.sysex == b'\xf0\x00 k\x7fB\x02\x00\x00\x15\x00\xf7' or event.sysex == bytes([0xF0, 0x00, 0x20, 0x6B, 0x7F, 0x42, 0x02, 0x00, 0x00, 0x15, 0x00, 0xF7]):
         print("Received Arturia DAW Mode SysEx. Triggering initialization.")

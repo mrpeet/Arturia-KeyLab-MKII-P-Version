@@ -8,50 +8,38 @@
 - It typically shows up after the keyboard has not been played for a while (observed after ~20–30 min idle), but not after every pause.
 
 ### What is actually happening
-Measured on Windows 11 (Windows MIDI Services / `midisrv`), KeyLab mkII 61, with `tools/` watchdogs running in parallel to FL:
+Measured on Windows 11 (Windows MIDI Services / `midisrv`), KeyLab mkII 61, with the `tools/` watchdogs listening in parallel to FL:
 
 | Check | Result during the hang |
 |:------|:-----------------------|
 | USB enumeration (`tools/usb_watch.ps1`) | Device stays fully present, all ports "OK" — no USB drop, no power loss |
-| MIDI from the keyboard (`tools/midi_activity_watch.py`, listens next to FL) | **Nothing arrives at Windows at all** — so FL and the script never see it |
+| MIDI from the keyboard (`tools/midi_activity_watch.py`) | **Nothing arrives at Windows at all** — so FL and the script never see it |
 | Sending to the keyboard | `midiOutLongMsg` fails, closing the port **hangs inside the driver** |
 | Windows MIDI service | Once something hung on the KeyLab port, **every** MIDI device (even other interfaces) hangs on open; `Restart-Service midisrv` stays in STOP_PENDING until the keyboard is switched off |
 | USB selective suspend disabled | Hang still happens → not the trigger |
-| Script SysEx traffic | The scripts send almost nothing while idle; the hang is independent of the script |
+| Script traffic while idle | Before the keep-alive the scripts sent **nothing** while idle |
 
-**Conclusion:** the keyboard's USB MIDI endpoints stop working while the rest of the firmware keeps running. It is not caused by FL Studio or this script. The FL freeze is a consequence: FL waits on the blocked Windows MIDI service.
+**Conclusion:** the keyboard's USB MIDI endpoints stop working while the rest of the firmware keeps running. It is not caused by FL Studio or by the script's MIDI handling. The FL freeze is a consequence: FL waits on the blocked Windows MIDI service.
 
 Whether this affects every KeyLab mkII / firmware version, or only some units, USB controllers or hubs, is unknown. Reports welcome.
 
-### Recover without power-cycling
-In an **administrator** terminal:
-```
-pnputil /enum-devices /connected | findstr VID_1C75
-pnputil /restart-device "USB\VID_1C75&PID_xxxx\<serial>"
-```
-Use the line **without** `&MI_` (the USB composite device). Then press **Options → MIDI Settings → Refresh device list** in FL. The keyboard works again immediately.
+### Keep-alive in the script (`keylab_keepalive.py`)
+Because the hang appears after idle time, the DAW script sends a 6-byte Universal Identity Request (`F0 7E 7F 06 01 F7`) every 30 s:
+- **Keep-alive:** regular two-way USB MIDI traffic even when nobody plays.
+- **Health check:** a healthy KeyLab answers within a few ms. Both scripts swallow the reply in `OnSysEx`; SysEx is not recorded by FL, so nothing shows up in patterns or recordings.
+- **If the keyboard does not answer** within 3 s, Script Output prints `KeyLab WARNING: keyboard does not answer` and FL's hint bar shows *"KeyLab not responding – switch the keyboard off and on"*. Probing then pauses (sending to a dead port is what can block the Windows MIDI service) until the keyboard sends anything again.
+- Cost: one timestamp compare per `OnIdle`, no allocations, no growing state.
 
-### Automatic recovery: `tools/keylab_guard.py`
-Runs in the background (Windows, standard library only):
-- Every 60 s it sends a 6-byte Universal Identity Request (`F0 7E 7F 06 01 F7`) and waits for the reply (a healthy KeyLab answers in ~5 ms). The main script swallows the reply, so FL is not affected.
-- Each probe runs in a short-lived child process, because a MIDI call on a dead port can hang in the driver. The guard holds no MIDI handles and keeps no growing state.
-- Two failed probes in a row → disable the device for 3 s, enable it again (like a short unplug), beep and log to `tools/keylab_guard.log`. Then press "Refresh device list" in FL if needed.
-- Without admin rights it only detects, beeps and logs the command to run.
+Whether the keep-alive actually *prevents* the hang is being tested — if you still get the warning with it, please report it.
 
-```
-py tools\keylab_guard.py              (from an administrator terminal)
-py tools\keylab_guard.py --once       (single probe: is the keyboard answering?)
-py tools\keylab_guard.py --no-reset   (detect + log only)
-```
-
-**Start automatically at logon** (no window, no UAC prompt) — run once from an administrator PowerShell:
-```
-powershell -ExecutionPolicy Bypass -File tools\install_guard_task.ps1
-powershell -ExecutionPolicy Bypass -File tools\install_guard_task.ps1 -Uninstall
-```
-This registers a scheduled task "KeyLab Guard" (run with highest privileges, restarts on failure). When the keyboard is off the guard just logs `ABSENT` and waits.
-
-Side question the log will answer: if the periodic probe alone keeps the keyboard from hanging (no `HANG` lines over many sessions), a tiny keep-alive could move into the FL script itself. Recovery (USB reset) cannot — FL scripts have no admin rights and no device-reset API.
+### Recovering
+- **Simplest:** switch the KeyLab off and on.
+- **Without power-cycling** (administrator terminal):
+  ```
+  pnputil /enum-devices /connected | findstr VID_1C75
+  pnputil /restart-device "USB\VID_1C75&PID_xxxx\<serial>"
+  ```
+  Use the line **without** `&MI_` (the USB composite device). Then press **Options → MIDI Settings → Refresh device list** in FL.
 
 ### Other things worth trying
 - Connect the keyboard **directly to a rear mainboard USB port** (not through a hub/front panel), with a short cable.

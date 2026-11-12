@@ -216,6 +216,53 @@ for i in range(100):
         run("daw", daw, "OnIdle")
 report("Encoder turning (1 s)", t, _now[0], max_per_sec=40)
 
+# ---------------------------------------------------------------- keep-alive
+IDENT_REQ = bytes([0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7])
+IDENT_REPLY = bytes.fromhex("f0 7e 7f 06 02 00 20 6b 02 00 05 64 54 01 03 01 f7")
+HINTS = []
+sys.modules["ui"].setHintMsg = HINTS.append
+
+
+def ident_count(t0, t1):
+    return sum(1 for s in window(t0, t1) if s[2] == IDENT_REQ)
+
+
+# healthy keyboard: answers every probe -> one request per 30 s, no warning
+t = _now[0]
+end = t + 125
+while _now[0] < end:
+    n = ident_count(t, _now[0] + 1)
+    run("fwd", fwd, "OnIdle"); run("daw", daw, "OnIdle")
+    if ident_count(t, _now[0] + 1) > n:   # a request just went out -> reply
+        advance(0.005)
+        for tag, mod in (("daw", daw), ("fwd", fwd)):
+            ev = Ev(0xF0, sysex=IDENT_REPLY)
+            run(tag, mod, "OnSysEx", ev)
+            if not ev.handled:
+                RESULTS.append(False); print("FAIL identity reply not swallowed by", tag)
+    advance(0.1)
+n = ident_count(t, _now[0])
+ok = 4 <= n <= 5 and not HINTS
+RESULTS.append(ok)
+print("%-4s %-30s %5d requests in 125 s, hints: %d" % ("OK" if ok else "FAIL", "Keep-alive, healthy", n, len(HINTS)))
+
+# dead keyboard: no replies -> exactly one warning, then probing pauses
+t = _now[0]
+idle(fwd, daw, 120)
+n = ident_count(t, _now[0])
+ok = n == 1 and len(HINTS) == 1
+RESULTS.append(ok)
+print("%-4s %-30s %5d requests in 120 s, hints: %d" % ("OK" if ok else "FAIL", "Keep-alive, no reply", n, len(HINTS)))
+
+# keyboard talks again (e.g. fader) -> probing resumes
+run("daw", daw, "OnMidiMsg", Ev(0xB0, 1, 64))
+t = _now[0]
+idle(fwd, daw, 35)
+n = ident_count(t, _now[0])
+ok = n == 1
+RESULTS.append(ok)
+print("%-4s %-30s %5d requests in 35 s after input" % ("OK" if ok else "FAIL", "Keep-alive, resumes", n))
+
 t = _now[0]
 run("daw", daw, "OnDeInit"); run("fwd", fwd, "OnDeInit")
 print("     OnDeInit sends %d SysEx" % len(window(t, _now[0] + 1)))
