@@ -44,6 +44,13 @@ py tools\keylab_guard.py --once       (single probe: is the keyboard answering?)
 py tools\keylab_guard.py --no-reset   (detect + log only)
 ```
 
+**Start automatically at logon** (no window, no UAC prompt) — run once from an administrator PowerShell:
+```
+powershell -ExecutionPolicy Bypass -File tools\install_guard_task.ps1
+powershell -ExecutionPolicy Bypass -File tools\install_guard_task.ps1 -Uninstall
+```
+This registers a scheduled task "KeyLab Guard" (run with highest privileges, restarts on failure). When the keyboard is off the guard just logs `ABSENT` and waits.
+
 Side question the log will answer: if the periodic probe alone keeps the keyboard from hanging (no `HANG` lines over many sessions), a tiny keep-alive could move into the FL script itself. Recovery (USB reset) cannot — FL scripts have no admin rights and no device-reset API.
 
 ### Other things worth trying
